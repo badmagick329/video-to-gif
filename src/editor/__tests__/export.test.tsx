@@ -121,10 +121,10 @@ describe('Export', () => {
     expect(screen.getByRole('button', { name: 'WebP' })).toBeDisabled();
 
     await emit('export-progress', { fileType: 'gif', progress: 0 });
-    expect(progressBar()).toHaveTextContent('Making GIF (1/3), analysing colours…');
+    expect(progressBar()).toHaveTextContent('Making GIF (1 of 3), analysing colours…');
     await emit('export-output', done('gif'));
     await emit('export-progress', { fileType: 'webp', progress: 0.5 });
-    expect(progressBar()).toHaveTextContent('Making WebP (2/3) 50%');
+    expect(progressBar()).toHaveTextContent('Making WebP (2 of 3) · 50%');
     expect(progressBar()).toHaveAttribute('aria-valuenow', '50');
 
     // The GIF is listed while WebP is still being made, playing from its file.
@@ -264,6 +264,14 @@ describe('Running card', () => {
       '40'
     );
     expect(card()).toHaveTextContent('started 0:04 ago');
+
+    // The overall bar and Cancel are pinned under this tab too: GIF done and WebP 40% of three.
+    const bar = screen.getByRole('progressbar', { name: 'Export progress' });
+    expect(bar).toHaveTextContent('Making WebP (2 of 3) · 40%');
+    expect(bar).toHaveAttribute('aria-valuenow', '47');
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(invoked('cancel_export')).toHaveLength(1);
+    expect(screen.getByRole('button', { name: 'Cancelling…' })).toBeDisabled();
 
     await emit('export-output', done('webp'));
     await emit('export-output', done('mp4'));

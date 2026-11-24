@@ -2,7 +2,7 @@ import type { MemoryEstimate } from '../ipc/export';
 import { ErrorDetails } from './SessionResults';
 import type { Destination } from './useDestination';
 import type { ExportNotice } from './useExport';
-import type { ExportJob } from './lib/export-run';
+import { overallProgress, progressText, type ExportJob } from './lib/export-run';
 import type { FileTypeEstimate } from './useSizeEstimate';
 import {
   OutputSettings,
@@ -96,17 +96,7 @@ export default function ExportFooter({
       {memory && <MemoryWarning estimate={memory} settings={settings} />}
       <SaveToRow saveTo={saveTo} disabled={converting} />
       {job ? (
-        <div className='flex flex-col gap-2'>
-          <ExportProgress job={job} />
-          <button
-            type='button'
-            className='h-8 rounded-md border border-line-strong bg-control text-md hover:bg-control-hover disabled:opacity-50'
-            disabled={job.cancelling}
-            onClick={onCancel}
-          >
-            {job.cancelling ? 'Cancelling…' : 'Cancel'}
-          </button>
-        </div>
+        <RunProgress job={job} onCancel={onCancel} />
       ) : (
         <button
           type='button'
@@ -221,38 +211,46 @@ function EstimateNote({
   return <p className='text-[11.5px] text-dim'>{text}</p>;
 }
 
-/** The export's progress bar: the file type being made, which of how many, and how far. */
-function ExportProgress({ job }: { job: ExportJob }) {
-  const index = Math.max(0, job.fileTypes.indexOf(job.fileType));
-  const progress = (index + job.done) / job.fileTypes.length;
+/**
+ * The running export's overall progress bar (`Making WebP (2 of 3) · 42%`) and Cancel, which take
+ * Export's place until the run ends: in the export footer, and pinned under the Exports tab.
+ */
+export function RunProgress({
+  job,
+  onCancel,
+}: {
+  job: ExportJob;
+  onCancel: () => void;
+}) {
+  const progress = overallProgress(job);
   return (
-    <div
-      role='progressbar'
-      aria-label='Export progress'
-      aria-valuemin={0}
-      aria-valuemax={100}
-      aria-valuenow={Math.round(progress * 100)}
-      className='relative h-[38px] overflow-hidden rounded-[7px] bg-control'
-    >
+    <div className='flex flex-col gap-2'>
       <div
-        className='absolute inset-y-0 left-0 bg-accent/70 transition-[width]'
-        style={{ width: `${progress * 100}%` }}
-      />
-      <p className='relative grid h-full place-items-center text-md font-semibold'>
-        {progressText(job, index)}
-      </p>
+        role='progressbar'
+        aria-label='Export progress'
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={Math.round(progress * 100)}
+        className='relative h-[38px] overflow-hidden rounded-[7px] border border-line-control bg-canvas'
+      >
+        <div
+          className='absolute inset-y-0 left-0 bg-accent/55 transition-[width]'
+          style={{ width: `${progress * 100}%` }}
+        />
+        <p className='relative grid h-full place-items-center text-base font-semibold'>
+          {progressText(job)}
+        </p>
+      </div>
+      <button
+        type='button'
+        className='h-[30px] rounded-md border border-line-strong text-md hover:bg-control-hover disabled:opacity-50'
+        disabled={job.cancelling}
+        onClick={onCancel}
+      >
+        {job.cancelling ? 'Cancelling…' : 'Cancel'}
+      </button>
     </div>
   );
-}
-
-function progressText(job: ExportJob, index: number): string {
-  const label = fileTypeInfo[job.fileType].label;
-  const total = job.fileTypes.length;
-  const count = total > 1 ? ` (${index + 1}/${total})` : '';
-  // A GIF's palette pass reads every frame before the first is written.
-  if (job.done === 0)
-    return `Making ${label}${count}${job.fileType === 'gif' ? ', analysing colours' : ''}…`;
-  return `Making ${label}${count} ${Math.round(job.done * 100)}%`;
 }
 
 /** Where Export saves, with Save to's folder picker. */

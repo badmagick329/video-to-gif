@@ -1,5 +1,6 @@
 import { ReactNode, useId, useState } from 'react';
 
+import { RunProgress } from './ExportFooter';
 import RunningCard from './RunningCard';
 import SessionResults from './SessionResults';
 import type { ExportJob } from './lib/export-run';
@@ -17,6 +18,7 @@ export default function Inspector({
   footer,
   results,
   job,
+  onCancel,
 }: {
   /** The Output tab's settings, or what stands in for them with nothing open. */
   output: ReactNode;
@@ -25,6 +27,7 @@ export default function Inspector({
   results: readonly SessionResult[];
   /** The running export, which may have started before this clip was opened. */
   job: ExportJob | null;
+  onCancel: () => void;
 }) {
   const [tab, setTab] = useState<Tab>('output');
   const id = useId();
@@ -83,10 +86,18 @@ export default function Inspector({
         id={`${id}-exports-panel`}
         aria-labelledby={`${id}-exports`}
         hidden={tab !== 'exports'}
-        className='flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto p-3'
+        className={tab === 'exports' ? 'flex min-h-0 flex-1 flex-col' : 'hidden'}
       >
-        {job && <RunningCard job={job} />}
-        <SessionResults results={results} />
+        <div className='flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto p-3'>
+          {job && <RunningCard job={job} />}
+          <SessionResults results={results} />
+        </div>
+        {/* The run's progress and Cancel stay in reach on this tab too. */}
+        {job && (
+          <div className='shrink-0 border-t border-[#2a2d33] bg-raised px-3.5 pb-3.5 pt-3'>
+            <RunProgress job={job} onCancel={onCancel} />
+          </div>
+        )}
       </div>
     </aside>
   );

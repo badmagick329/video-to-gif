@@ -240,6 +240,7 @@ export default function SourceEditor({
       <Inspector
         results={results}
         job={job}
+        onCancel={onCancel}
         output={
           // A fieldset defaults to min-width: min-content, so without min-w-0
           // wide settings rows push past the column instead of shrinking.
