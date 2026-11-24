@@ -182,7 +182,10 @@ test('? opens the shortcuts overlay, and Escape closes it', async () => {
   press('?', { shiftKey: true });
   const overlay = screen.getByRole('dialog', { name: 'Keyboard shortcuts' });
   expect(overlay).toHaveTextContent('SpacePlay or pause');
-  expect(overlay).toHaveTextContent('I/OSet the selection start or end at the playhead');
+  expect(overlay).toHaveTextContent('I/OSet the in or out point at the playhead');
+  expect(overlay).toHaveTextContent('Home/EndGo to the in or out point');
+  expect(overlay).toHaveTextContent('Ctrl+WheelZoom the timeline at the playhead');
+  expect(overlay).toHaveTextContent('WheelScroll a zoomed timeline');
   expect(overlay).toHaveTextContent('Ctrl+EnterExport');
   expect(overlay).toHaveTextContent('Ctrl+OOpen a video');
   press('Escape');
@@ -193,4 +196,18 @@ test('? opens the shortcuts overlay, and Escape closes it', async () => {
   expect(screen.getByRole('dialog', { name: 'Keyboard shortcuts' })).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Close' }));
   expect(screen.queryByRole('dialog')).toBeNull();
+});
+
+test('the timeline zoom slider keeps its arrow, Home and End keys, and the rest stay shortcuts', async () => {
+  const [video] = await loadClip();
+  const zoom = screen.getByRole('slider', { name: 'Timeline zoom' });
+  act(() => zoom.focus());
+  video.currentTime = 10;
+  // Home and End belong to the slider, so the playhead stays.
+  press('End', {}, zoom);
+  expect(video.currentTime).toBe(10);
+  press('i', {}, zoom);
+  expect(startField().value).toBe('0:10.00');
+  press(' ', {}, zoom);
+  expect(played).toEqual([video]);
 });

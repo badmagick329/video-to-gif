@@ -5,15 +5,17 @@ const shortcuts: Array<[keys: string[], action: string]> = [
   [['Space'], 'Play or pause'],
   [['←', '/', '→'], 'Previous or next frame'],
   [['Shift', '+', '←', '/', '→'], 'Back or forward 1 second'],
-  [['I', '/', 'O'], 'Set the selection start or end at the playhead'],
-  [['Home', '/', 'End'], 'Go to the selection start or end'],
+  [['I', '/', 'O'], 'Set the in or out point at the playhead'],
+  [['Home', '/', 'End'], 'Go to the in or out point'],
+  [['Ctrl', '+', 'Wheel'], 'Zoom the timeline at the playhead'],
+  [['Wheel'], 'Scroll a zoomed timeline'],
   [['Ctrl', '+', 'Enter'], 'Export'],
   [['Ctrl', '+', 'O'], 'Open a video'],
   [['?'], 'Show these shortcuts'],
 ];
 const separators = new Set(['+', '/']);
 
-/** The keyboard shortcuts, over the window. `?` or the status bar opens it; Escape closes it. */
+/** The keyboard shortcuts and the timeline's wheel gestures, over the window. `?` or the status bar opens it; Escape closes it. */
 export default function ShortcutsOverlay({ onClose }: { onClose: () => void }) {
   const close = useRef<HTMLButtonElement>(null);
   useEffect(() => {
