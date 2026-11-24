@@ -10,11 +10,11 @@ mod probe;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        // Register slice commands here, and only here, as they are written, e.g.
-        // .invoke_handler(tauri::generate_handler![
-        //     probe::presentation::probe_source,
-        //     export::presentation::start_export,
-        // ])
+        // Register slice commands here, and only here, as they are written.
+        .invoke_handler(tauri::generate_handler![
+            probe::presentation::find_ffmpeg,
+            probe::presentation::probe_source,
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

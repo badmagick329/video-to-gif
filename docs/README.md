@@ -4,7 +4,7 @@ These documents live under `docs/` and are tracked in Git: commit document chang
 
 ## Project in one paragraph
 
-video-to-gif is a Windows-first desktop app that turns a video into GIF, WebP and MP4 with everything the advanced mode of [mgck's Discord GIF tool](https://mgck.ink/discordgifs) offers, by running the user's own `ffmpeg` and `ffprobe` from PATH. Because ffmpeg runs natively, it takes any source that ffmpeg can read, at any size, including the AV1, HEVC and MKV files and multi-GB recordings the browser version fails on. It is Tauri 2: a Rust backend that owns ffmpeg, and a React + TypeScript + Vite + Tailwind frontend in WebView2, talking over Tauri IPC. The root `README.md` is the public page. Status: VTG-2 done: the app opens an empty window, `pnpm check` runs every check, and these docs exist. No feature works yet; VTG-3 (find ffmpeg, probe a source) is next.
+video-to-gif is a Windows-first desktop app that turns a video into GIF, WebP and MP4 with everything the advanced mode of [mgck's Discord GIF tool](https://mgck.ink/discordgifs) offers, by running the user's own `ffmpeg` and `ffprobe` from PATH. Because ffmpeg runs natively, it takes any source that ffmpeg can read, at any size, including the AV1, HEVC and MKV files and multi-GB recordings the browser version fails on. It is Tauri 2: a Rust backend that owns ffmpeg, and a React + TypeScript + Vite + Tailwind frontend in WebView2, talking over Tauri IPC. The root `README.md` is the public page. Status: VTG-3 done: at startup the app finds `ffmpeg` and `ffprobe` on PATH and shows the setup message when either is missing, and the backend can probe a source; nothing opens a file yet. VTG-4 is next.
 
 ## The plan: YouTrack project `VTG`
 
