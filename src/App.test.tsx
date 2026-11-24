@@ -5,6 +5,12 @@ import App from './App';
 import type { FfmpegTools, Tool } from './probe';
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }));
+// The main view listens for drops and proxy progress once ffmpeg is found.
+vi.mock('@tauri-apps/api/event', () => ({ listen: vi.fn(async () => () => {}) }));
+vi.mock('@tauri-apps/api/webview', () => ({
+  getCurrentWebview: () => ({ onDragDropEvent: async () => () => {} }),
+}));
+vi.mock('@tauri-apps/plugin-dialog', () => ({ open: vi.fn() }));
 
 const found = (name: string): Tool => ({
   status: 'found',

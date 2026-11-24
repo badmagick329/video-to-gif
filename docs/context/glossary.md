@@ -8,10 +8,12 @@ The project's ubiquitous language, one row per concept; the index's *Language* s
 | Displayed size | A source's width and height as shown: the coded size with rotation metadata applied, so a quarter turn swaps them. Crop rectangles and output sizes are in these pixels, because ffmpeg auto-rotates before any filter. | coded size (that is the pre-rotation size) | `SourceInfo.width`/`height` |
 | Export | Running ffmpeg on the source, with the selection, crop and settings, to produce one or more outputs. Always reads the source, never the proxy. | convert, render, encode | `export` slice |
 | Output | A GIF, WebP or MP4 file produced by an export. One export can produce any mix of the three; the results screen lists them with Open and Show in folder. | | |
-| Preview source | What the editor's video player plays: the source itself when WebView2 can decode it, otherwise its proxy. | | `preview` slice |
+| Preview source | What the editor's video player plays: the source itself when WebView2 can decode it, otherwise its proxy. | | `preview::domain::PreviewSource`, `open_source` command |
 | Probe | Reading a source's metadata with ffprobe and validating it into source info. | inspect, analyse | `probe` slice, `probe_source` command |
-| Proxy | A reduced H.264 copy of the source, made by ffmpeg for preview only, never exported. | transcode, preview file | `preview` slice |
+| Proxy | A reduced H.264 copy of the source (at most 720 high, a keyframe a second), made by ffmpeg for preview only, never exported, kept in the temp folder while its source stays open. UI copy calls it a "preview copy", a phrase users understand. | transcode, preview file | `preview` slice, `make_proxy` command |
 | Selection | The trimmed time range of the source that an export uses. | clip, trim range, range | |
 | Setup message | What the app shows in place of its main view when `ffmpeg` or `ffprobe` is missing from PATH or does not run; it names which and how to install them. | error screen, onboarding | `SetupMessage.tsx`, `find_ffmpeg` command |
-| Source | The user's video, opened by path through drag-drop or a file dialog; any file the user's ffmpeg can read. Never copied or modified. | input, upload | |
+| Shared kernel | Crate-level Rust modules outside every slice that any slice may use: `process.rs` and `search_path.rs`, which find and start ffmpeg and ffprobe. | common, utils | `crate::process`, `crate::search_path` |
+| Source | The user's video, opened by path through drag-drop or a file dialog; any file the user's ffmpeg can read. Never copied or modified. One is open at a time; opening another replaces it. | input, upload | `SourcePreview.tsx` |
 | Source info | A source's validated metadata: duration, displayed size, frame rate, video codec, container and whether it has audio. | metadata, probe result | `probe::domain::SourceInfo` |
+| Temp folder | `%TEMP%\video-to-gif`, where the app keeps proxies: one session folder per running app, swept of crashed sessions at startup and deleted at exit. | cache, scratch dir | `preview::infrastructure::temp_folder` |

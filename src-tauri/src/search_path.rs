@@ -6,6 +6,9 @@
 //! the setup message when nothing is found. The owner's PATH holds a folder named `ffmpeg` beside
 //! `ffmpeg.exe` in its first ffmpeg directory; only regular files count as matches, so that folder
 //! never shadows anything.
+//!
+//! Shared kernel, beside [`crate::process`]: every slice that runs ffmpeg or ffprobe must resolve
+//! the same program the startup check reported.
 
 use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};

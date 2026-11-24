@@ -1,6 +1,4 @@
-//! The probe slice's I/O: searching PATH, starting processes, and running ffmpeg and ffprobe.
+//! The probe slice's I/O: checking that ffmpeg and ffprobe run, and probing a source with ffprobe.
 
 pub mod ffprobe;
-pub mod process;
-pub mod search_path;
 pub mod tools;

@@ -34,6 +34,10 @@ export function findFfmpeg(): Promise<FfmpegTools> {
   return invoke<FfmpegTools>('find_ffmpeg');
 }
 
+export function isProbeError(error: unknown): error is ProbeError {
+  return typeof error === 'object' && error !== null && 'kind' in error;
+}
+
 /** Rejects with a ProbeError. */
 export function probeSource(path: string): Promise<SourceInfo> {
   return invoke<SourceInfo>('probe_source', { path });

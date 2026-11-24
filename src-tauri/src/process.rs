@@ -1,4 +1,7 @@
 //! Starting ffmpeg and ffprobe from a GUI app.
+//!
+//! Shared kernel: `probe`, `preview` and `export` all spawn these programs and must all hide the
+//! console window, so the flags live here once rather than in each slice.
 
 use std::path::Path;
 use std::process::{Command, Stdio};

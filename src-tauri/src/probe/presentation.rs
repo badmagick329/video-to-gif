@@ -7,8 +7,8 @@
 use std::path::PathBuf;
 
 use crate::probe::domain::{FfmpegTools, ProbeError, SourceInfo};
-use crate::probe::infrastructure::search_path::SearchPath;
 use crate::probe::infrastructure::{ffprobe, tools};
+use crate::search_path::SearchPath;
 
 /// Reports where `ffmpeg` and `ffprobe` are and their versions, or which is missing or broken.
 /// The frontend calls it at startup and shows the setup message unless both are found.

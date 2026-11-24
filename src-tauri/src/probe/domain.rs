@@ -4,7 +4,7 @@
 
 use std::fmt;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 /// One of the two programs the app runs, as found (or not) on PATH.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -30,7 +30,10 @@ pub struct FfmpegTools {
 }
 
 /// A source's metadata, validated from ffprobe's output.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+///
+/// `Deserialize` because the frontend hands it back to the `preview` slice with the source it
+/// opens; that copy is untrusted and the receiving command checks it.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SourceInfo {
     /// Seconds, finite and positive.

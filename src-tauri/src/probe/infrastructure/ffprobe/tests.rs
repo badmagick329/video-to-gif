@@ -8,8 +8,8 @@ use tempfile::TempDir;
 
 use super::{parse, probe};
 use crate::probe::domain::{ProbeError, SourceInfo};
-use crate::probe::infrastructure::process;
-use crate::probe::infrastructure::search_path::SearchPath;
+use crate::process;
+use crate::search_path::SearchPath;
 
 const VIDEO: [&str; 4] = [
     "-f",

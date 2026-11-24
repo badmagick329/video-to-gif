@@ -7,7 +7,7 @@ use std::path::Path;
 use serde::Deserialize;
 
 use crate::probe::domain::{ProbeError, SourceInfo, displayed_size};
-use crate::probe::infrastructure::process;
+use crate::process;
 
 /// Highest frame rate accepted as real. Some demuxers report a timebase such as `90000/1` as
 /// `r_frame_rate`; anything above this is treated as absent rather than trusted.

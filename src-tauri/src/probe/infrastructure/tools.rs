@@ -3,8 +3,8 @@
 use std::path::Path;
 
 use crate::probe::domain::{FfmpegTools, Tool};
-use crate::probe::infrastructure::process;
-use crate::probe::infrastructure::search_path::SearchPath;
+use crate::process;
+use crate::search_path::SearchPath;
 
 /// Locates both programs and asks each for its version. A found file that fails `-version` is
 /// reported unusable rather than found, so the setup message also covers a broken install.

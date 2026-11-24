@@ -4,7 +4,7 @@ These documents live under `docs/` and are tracked in Git: commit document chang
 
 ## Project in one paragraph
 
-video-to-gif is a Windows-first desktop app that turns a video into GIF, WebP and MP4 with everything the advanced mode of [mgck's Discord GIF tool](https://mgck.ink/discordgifs) offers, by running the user's own `ffmpeg` and `ffprobe` from PATH. Because ffmpeg runs natively, it takes any source that ffmpeg can read, at any size, including the AV1, HEVC and MKV files and multi-GB recordings the browser version fails on. It is Tauri 2: a Rust backend that owns ffmpeg, and a React + TypeScript + Vite + Tailwind frontend in WebView2, talking over Tauri IPC. The root `README.md` is the public page. Status: VTG-3 done: at startup the app finds `ffmpeg` and `ffprobe` on PATH and shows the setup message when either is missing, and the backend can probe a source; nothing opens a file yet. VTG-4 is next.
+video-to-gif is a Windows-first desktop app that turns a video into GIF, WebP and MP4 with everything the advanced mode of [mgck's Discord GIF tool](https://mgck.ink/discordgifs) offers, by running the user's own `ffmpeg` and `ffprobe` from PATH. Because ffmpeg runs natively, it takes any source that ffmpeg can read, at any size, including the AV1, HEVC and MKV files and multi-GB recordings the browser version fails on. It is Tauri 2: a Rust backend that owns ffmpeg, and a React + TypeScript + Vite + Tailwind frontend in WebView2, talking over Tauri IPC. The root `README.md` is the public page. Status: VTG-4 done: a source opens in place by drop or file dialog, is probed, and plays in the app, directly when WebView2 can play it and otherwise through a proxy; proxies are deleted on replace, at exit and by the next startup. There is no editor yet. VTG-5 is next.
 
 ## The plan: YouTrack project `VTG`
 
@@ -29,7 +29,7 @@ The plan and all issues live in YouTrack project `VTG` ("video-to-gif"), read an
 | Location | Purpose and retention |
 | --- | --- |
 | [context/glossary.md](context/glossary.md) | The ubiquitous language. Update when a concept is added, renamed or retired. |
-| [context/architecture.md](context/architecture.md) | Repo shape, slices and layers, the IPC boundary, finding ffmpeg. Rewrite a section when the code it describes changes; add one when a Task builds something new. |
+| [context/architecture.md](context/architecture.md) | Repo shape, slices and layers, the shared kernel, the IPC boundary, finding ffmpeg, previewing a source (allowlist, proxy, asset protocol, temp folder). Rewrite a section when the code it describes changes; add one when a Task builds something new. |
 | [decisions/2026-11-24-v0-scope.md](decisions/2026-11-24-v0-scope.md) | What v0 builds and what waits. Supersede with a new ADR when scope changes. |
 | [decisions/2026-11-24-tauri-2.md](decisions/2026-11-24-tauri-2.md) | Why Tauri 2 with a React frontend, over Electron and a native Rust GUI. Supersede if the app framework changes. |
 | [decisions/2026-11-24-windows-first.md](decisions/2026-11-24-windows-first.md) | Windows is the only tested platform; other platforms cost nothing extra. Supersede when another platform is tested. |
