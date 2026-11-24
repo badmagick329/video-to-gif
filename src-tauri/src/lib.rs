@@ -21,6 +21,7 @@ pub fn run() {
             probe::presentation::find_ffmpeg,
             probe::presentation::probe_source,
             preview::presentation::open_source,
+            preview::presentation::close_source,
             preview::presentation::make_proxy,
             preview::presentation::make_thumbnails,
         ])

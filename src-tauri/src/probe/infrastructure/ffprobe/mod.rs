@@ -98,10 +98,12 @@ fn parse(json: &[u8], file: &Path) -> Result<SourceInfo, ProbeError> {
         .iter()
         .find(|s| s.codec_type.as_deref() == Some("video") && !is_attached_pic(s))
         .ok_or_else(|| ProbeError::NoVideoStream { path: path.clone() })?;
-    let has_audio = raw
+    // The first audio stream is the one the player and the proxy (`-map 0:a:0`) use.
+    let audio_codec = raw
         .streams
         .iter()
-        .any(|s| s.codec_type.as_deref() == Some("audio"));
+        .find(|s| s.codec_type.as_deref() == Some("audio"))
+        .map(|audio| non_empty(&audio.codec_name).unwrap_or_else(|| "unknown".to_owned()));
 
     let coded_width = positive_dimension(video.width).ok_or_else(|| invalid("no video width"))?;
     let coded_height =
@@ -133,7 +135,7 @@ fn parse(json: &[u8], file: &Path) -> Result<SourceInfo, ProbeError> {
         frame_rate,
         video_codec,
         container,
-        has_audio,
+        audio_codec,
     })
 }
 

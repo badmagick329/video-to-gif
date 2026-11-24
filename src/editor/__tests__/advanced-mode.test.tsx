@@ -268,7 +268,7 @@ test('the request carries every edit', async () => {
 });
 
 test('a source without sound offers no Keep sound', async () => {
-  const { request } = renderAdvancedEditor({ info: sourceInfo({ hasAudio: false }) });
+  const { request } = renderAdvancedEditor({ info: sourceInfo({ audioCodec: null }) });
   fireEvent.click(screen.getByText('Quality & looping'));
   expect(screen.queryByRole('switch', { name: 'Keep sound in MP4' })).toBeNull();
   await convert();

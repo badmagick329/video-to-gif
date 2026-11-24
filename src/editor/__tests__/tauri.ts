@@ -83,7 +83,7 @@ export const sourceInfo = (patch: Partial<SourceInfo> = {}): SourceInfo => ({
   frameRate: 30,
   videoCodec: 'h264',
   container: 'mov,mp4,m4a,3gp,3g2,mj2',
-  hasAudio: true,
+  audioCodec: 'aac',
   ...patch,
 });
 

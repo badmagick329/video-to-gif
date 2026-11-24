@@ -1,9 +1,9 @@
 //! The open source and its proxy, for the app's whole run.
 //!
 //! One source is open at a time, with at most one proxy, kept in the session's temp folder and
-//! reused until another source replaces it, and at most one folder of timeline thumbnails.
-//! Replacing the source cancels a proxy build still running and deletes the old proxy and
-//! thumbnails; shutting down does the same and deletes the temp folder.
+//! reused until another source replaces it or it is closed, and at most one folder of timeline
+//! thumbnails. Replacing or closing the source cancels a proxy build still running and deletes the
+//! old proxy and thumbnails; shutting down does the same and deletes the temp folder.
 
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
@@ -110,10 +110,7 @@ impl Previewer {
             Some(current) if current.source == source => current.info = info,
             _ => {
                 if let Some(previous) = state.current.take() {
-                    discard(previous.proxy, false);
-                    if let Some(thumbnails) = previous.thumbnails {
-                        let _ = std::fs::remove_dir_all(thumbnails.dir);
-                    }
+                    release(previous, false);
                 }
                 state.current = Some(Current {
                     source,
@@ -124,6 +121,18 @@ impl Previewer {
             }
         }
         choice
+    }
+
+    /// Closes `source` when it is the open source: stops its proxy build, waiting for ffmpeg to
+    /// exit, and deletes its proxy and thumbnails. A build's partial file is deleted by the thread
+    /// running [`Self::proxy`], which then returns [`PreviewError::Cancelled`]. Closing a source that
+    /// is not open does nothing, so a close that raced a newer open cannot close the newer source.
+    pub fn close(&self, source: &Path) {
+        let mut state = lock(&self.state);
+        if state.current.as_ref().is_some_and(|c| c.source == source) {
+            let current = state.current.take().expect("checked above");
+            release(current, true);
+        }
     }
 
     /// The open source's proxy: the existing one, the one already building, or a new build with
@@ -290,6 +299,14 @@ impl Previewer {
             discard(current.proxy, true);
         }
         state.folder.remove()
+    }
+}
+
+/// Gives up a source that is no longer open: its proxy, as [`discard`] does, and its thumbnails.
+fn release(current: Current, wait: bool) {
+    discard(current.proxy, wait);
+    if let Some(thumbnails) = current.thumbnails {
+        let _ = std::fs::remove_dir_all(thumbnails.dir);
     }
 }
 

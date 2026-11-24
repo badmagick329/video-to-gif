@@ -19,6 +19,7 @@ import {
   renderWithListeners,
   resetTauri,
   sourceInfo,
+  tauri,
 } from './tauri';
 
 vi.mock('@tauri-apps/api/core', async () => (await import('./tauri')).core);
@@ -193,6 +194,52 @@ test('says when ffmpeg fails to make the proxy', async () => {
   expect(await screen.findByRole('alert')).toHaveTextContent(
     'ffmpeg could not make a preview copy of broken.mkv: Conversion failed!'
   );
+});
+
+test('removing the clip mid-proxy closes its source in the backend', async () => {
+  const proxy = deferred<string>();
+  const closed: unknown[] = [];
+  backend({
+    probe_source: async () => ({ ...info, videoCodec: 'hevc' }),
+    open_source: async () => 'proxy',
+    make_proxy: () => proxy.promise,
+    make_thumbnails: () => new Promise(() => {}),
+    close_source: async (args) => {
+      closed.push(args);
+      // The backend stops the build, so the pending make_proxy fails as cancelled.
+      proxy.reject({ kind: 'cancelled' });
+    },
+  });
+  await renderWithListeners(<Editor />);
+  await drop('C:\\videos\\phone.mkv');
+  expect(await screen.findByRole('progressbar')).toBeInTheDocument();
+
+  await act(async () => {
+    fireEvent.click(screen.getByRole('button', { name: 'Remove phone.mkv' }));
+  });
+
+  expect(closed).toEqual([{ path: 'C:\\videos\\phone.mkv' }]);
+  expect(screen.queryByRole('progressbar')).toBeNull();
+  expect(screen.queryByRole('alert')).toBeNull();
+  expect(document.querySelector('video')).toBeNull();
+  expect(
+    screen.getByRole('button', { name: /Drop a video or GIF here/ })
+  ).toBeInTheDocument();
+});
+
+test('removing a clip that plays the source also closes it', async () => {
+  clipBackend(info);
+  const closeSource = vi.fn(async () => {});
+  tauri.commands.close_source = closeSource;
+  await renderWithListeners(<Editor />);
+  await drop('C:\\videos\\clip.mp4');
+
+  await act(async () => {
+    fireEvent.click(screen.getByRole('button', { name: 'Remove clip.mp4' }));
+  });
+
+  expect(closeSource).toHaveBeenCalledWith({ path: 'C:\\videos\\clip.mp4' });
+  expect(document.querySelector('video')).toBeNull();
 });
 
 describe('on a proxy, sizes are in the source’s displayed pixels', () => {

@@ -3,6 +3,7 @@ import { open } from '@tauri-apps/plugin-dialog';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import {
+  closeSource,
   fileUrl,
   isPreviewError,
   makeProxy,
@@ -241,11 +242,17 @@ export function useSource(onOpen: () => void) {
     if (typeof path === 'string') await openPath(path);
   }, [openPath]);
 
-  /** Leaves the editor empty. The backend keeps the source open until another replaces it. */
+  /**
+   * Leaves the editor empty and closes the source in the backend, which stops a proxy build still
+   * running and deletes the proxy and thumbnails, rather than holding them until the next open.
+   */
   const close = useCallback(() => {
     openCount.current++;
+    if (state.stage !== 'empty')
+      // A failure leaves nothing for the user to do: the next open or exit releases the source.
+      closeSource(state.path).catch(() => {});
     setState({ stage: 'empty' });
-  }, []);
+  }, [state]);
 
   /**
    * The player could not decode the source after all (the allowlist admits it, WebView2 does

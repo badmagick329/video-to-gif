@@ -1,6 +1,6 @@
 //! What the probe slice knows, as plain types: whether ffmpeg and ffprobe can run, and a
 //! source's validated metadata. These cross IPC as they are (serde), so the TypeScript mirror in
-//! `src/probe.ts` must change with them.
+//! `src/ipc/probe.ts` must change with them.
 
 use std::fmt;
 
@@ -50,7 +50,17 @@ pub struct SourceInfo {
     /// ffprobe's `format_name`, a comma-separated list of demuxer names, e.g.
     /// `mov,mp4,m4a,3gp,3g2,mj2` or `matroska,webm`.
     pub container: String,
-    pub has_audio: bool,
+    /// ffprobe's `codec_name` for the first audio stream, e.g. `aac`, `flac`, `opus`; `None` when
+    /// the source has no audio. An audio stream ffprobe names no codec for is `unknown`, so it
+    /// still counts as sound. The one field that says whether there is sound, so the two cannot
+    /// disagree.
+    pub audio_codec: Option<String>,
+}
+
+impl SourceInfo {
+    pub fn has_audio(&self) -> bool {
+        self.audio_codec.is_some()
+    }
 }
 
 /// Why a source could not be probed. Serialized with a `kind` tag so the frontend can show

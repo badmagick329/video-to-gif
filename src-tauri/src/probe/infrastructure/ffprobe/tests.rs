@@ -53,14 +53,20 @@ fn probe_ok(file: &Path) -> SourceInfo {
 }
 
 /// The fields every generated clip shares: 320x240 coded, 10 fps, about one second.
-fn assert_clip(info: &SourceInfo, size: (u32, u32), codec: &str, container: &str, audio: bool) {
+fn assert_clip(
+    info: &SourceInfo,
+    size: (u32, u32),
+    codec: &str,
+    container: &str,
+    audio: Option<&str>,
+) {
     assert_eq!((info.width, info.height), size, "{info:?}");
     assert_eq!(info.video_codec, codec, "{info:?}");
     assert!(
         info.container.split(',').any(|name| name == container),
         "{info:?}"
     );
-    assert_eq!(info.has_audio, audio, "{info:?}");
+    assert_eq!(info.audio_codec.as_deref(), audio, "{info:?}");
     assert!((info.frame_rate - 10.0).abs() < 0.01, "{info:?}");
     assert!((0.9..=1.2).contains(&info.duration), "{info:?}");
 }
@@ -77,7 +83,7 @@ fn h264_mp4() {
         "h264.mp4",
         &with_audio(&["-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac"]),
     );
-    assert_clip(&probe_ok(&clip), (320, 240), "h264", "mp4", true);
+    assert_clip(&probe_ok(&clip), (320, 240), "h264", "mp4", Some("aac"));
 }
 
 #[test]
@@ -88,7 +94,7 @@ fn av1_mp4() {
         "av1.mp4",
         &with_audio(&["-c:v", "libsvtav1", "-preset", "12", "-c:a", "aac"]),
     );
-    assert_clip(&probe_ok(&clip), (320, 240), "av1", "mp4", true);
+    assert_clip(&probe_ok(&clip), (320, 240), "av1", "mp4", Some("aac"));
 }
 
 #[test]
@@ -108,7 +114,13 @@ fn hevc_mkv() {
             "aac",
         ]),
     );
-    assert_clip(&probe_ok(&clip), (320, 240), "hevc", "matroska", true);
+    assert_clip(
+        &probe_ok(&clip),
+        (320, 240),
+        "hevc",
+        "matroska",
+        Some("aac"),
+    );
 }
 
 #[test]
@@ -128,7 +140,7 @@ fn vp9_webm() {
             "libopus",
         ]),
     );
-    assert_clip(&probe_ok(&clip), (320, 240), "vp9", "webm", true);
+    assert_clip(&probe_ok(&clip), (320, 240), "vp9", "webm", Some("opus"));
 }
 
 #[test]
@@ -136,7 +148,52 @@ fn clip_without_audio() {
     let dir = TempDir::new().unwrap();
     let args = [&VIDEO[..], &["-c:v", "libx264", "-pix_fmt", "yuv420p"]].concat();
     let clip = ffmpeg(&dir, "silent.mp4", &args);
-    assert_clip(&probe_ok(&clip), (320, 240), "h264", "mp4", false);
+    assert_clip(&probe_ok(&clip), (320, 240), "h264", "mp4", None);
+}
+
+/// The audio codec decides direct play, so each one the allowlist names, and one it rejects, is
+/// probed from a real file.
+#[test]
+fn audio_codec_is_the_first_audio_streams() {
+    let dir = TempDir::new().unwrap();
+    let h264 = ["-c:v", "libx264", "-pix_fmt", "yuv420p"];
+    for (name, encoder, codec, container) in [
+        ("flac.mkv", "flac", "flac", "matroska"),
+        ("vorbis.mkv", "libvorbis", "vorbis", "matroska"),
+        ("mp3.mp4", "libmp3lame", "mp3", "mp4"),
+        ("opus.mp4", "libopus", "opus", "mp4"),
+        ("ac3.mp4", "ac3", "ac3", "mp4"),
+    ] {
+        let clip = ffmpeg(
+            &dir,
+            name,
+            &with_audio(&[&h264[..], &["-c:a", encoder]].concat()),
+        );
+        assert_clip(&probe_ok(&clip), (320, 240), "h264", container, Some(codec));
+    }
+
+    // Two audio tracks: the first is the one the player and the proxy use.
+    let args = [
+        &VIDEO[..],
+        &AUDIO[..],
+        &AUDIO[..],
+        &["-map", "0:v", "-map", "1:a", "-map", "2:a"],
+        &h264[..],
+        &["-c:a:0", "ac3", "-c:a:1", "aac", "-shortest"],
+    ]
+    .concat();
+    let clip = ffmpeg(&dir, "two-tracks.mp4", &args);
+    assert_clip(&probe_ok(&clip), (320, 240), "h264", "mp4", Some("ac3"));
+}
+
+#[test]
+fn an_audio_stream_without_a_codec_name_still_counts_as_sound() {
+    let output = json!({
+        "streams": [video_stream(), { "codec_type": "audio" }],
+        "format": { "format_name": "matroska,webm", "duration": "3.0" }
+    });
+    let info = parse_json(output).unwrap();
+    assert_eq!(info.audio_codec.as_deref(), Some("unknown"));
 }
 
 #[test]
@@ -152,7 +209,7 @@ fn quarter_turn_rotation_swaps_the_displayed_size() {
         "rotated.mp4",
         &["-display_rotation", "90", "-i", upright, "-c", "copy"],
     );
-    assert_clip(&probe_ok(&rotated), (240, 320), "h264", "mp4", false);
+    assert_clip(&probe_ok(&rotated), (240, 320), "h264", "mp4", None);
 }
 
 #[test]
@@ -240,7 +297,7 @@ fn cover_art_is_not_the_video_stream() {
     });
     let info = parse_json(video_with_cover).unwrap();
     assert_eq!((info.video_codec.as_str(), info.width), ("h264", 1920));
-    assert!(info.has_audio);
+    assert_eq!(info.audio_codec.as_deref(), Some("mp3"));
 }
 
 #[test]

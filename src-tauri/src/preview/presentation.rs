@@ -63,6 +63,20 @@ pub async fn open_source(
     Ok(previewer.open(file, info))
 }
 
+/// Closes the source at `path` when it is the open source, as the editor removes its clip: stops a
+/// running proxy build and deletes its proxy and thumbnails. Any other path is left alone, since
+/// a newer open has already replaced it. The webview keeps read access to the file until exit,
+/// because Tauri's asset scope cannot shrink.
+#[tauri::command]
+pub async fn close_source(app: AppHandle, path: String) {
+    // Waits for a killed ffmpeg to exit; keep that off the async runtime's workers.
+    tauri::async_runtime::spawn_blocking(move || {
+        app.state::<Previewer>().close(&PathBuf::from(path));
+    })
+    .await
+    .expect("close_source task panicked");
+}
+
 /// Returns the path of the open source's proxy, building it first if needed and emitting
 /// `proxy-progress` events meanwhile. `path` must be the open source.
 #[tauri::command]

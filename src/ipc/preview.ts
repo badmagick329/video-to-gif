@@ -37,6 +37,14 @@ export function openSource(
 }
 
 /**
+ * Closes the source if it is still the open one: stops its proxy build and deletes its proxy and
+ * thumbnails. A path that is no longer open is ignored. Never rejects with a PreviewError.
+ */
+export function closeSource(path: string): Promise<void> {
+  return invoke<void>('close_source', { path });
+}
+
+/**
  * Resolves to the proxy's file path once it exists, building it if needed; progress arrives
  * through onProxyProgress. Rejects with a PreviewError, `cancelled` when another source replaced
  * this one.

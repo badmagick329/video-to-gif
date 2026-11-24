@@ -23,27 +23,76 @@ pub enum PreviewSource {
 /// generated clip in the app's WebView2 on Windows 11. HEVC is left out on purpose: WebView2
 /// decodes it only where the HEVC Video Extensions and a capable GPU are present (the owner's
 /// machine has both), so whether it plays depends on the user's PC rather than the file.
-const PLAYABLE_CODECS: [&str; 3] = ["h264", "vp9", "av1"];
+const PLAYABLE_VIDEO_CODECS: [&str; 3] = ["h264", "vp9", "av1"];
 
-/// Plays the source itself when it is H.264, VP9 or AV1 in MP4 or WebM; anything else gets a
-/// proxy. The frontend still falls back to a proxy if the player reports an error on the source,
-/// or shows no picture, which catches files the allowlist admits but WebView2 rejects (e.g. 10-bit
-/// or 4:4:4 H.264).
+/// Audio codecs (ffprobe `codec_name`) played from the source, per container. Each pair was
+/// confirmed on generated clips (testsrc2 with a sine tone) in Chrome and in the app's WebView2:
+/// the tone reached Web Audio as non-silent samples and `webkitAudioDecodedByteCount` grew,
+/// before and after a seek. The two lists match today; they stay separate because each pair was
+/// tested on its own and a future codec may not hold in both.
 ///
-/// ffprobe reports MKV and WebM alike (`format_name` `matroska,webm`; only the file's EBML DocType
-/// differs), so a Matroska file counts as WebM only when `source` is named `.webm`. MKV files with
-/// these codecs also played in WebView2, but MKV carries codecs and features (FLAC, PCM, ordered
-/// chapters, styled subtitles) WebM forbids, so MKV takes the proxy. MP4's family (`mov,mp4,...`)
-/// also covers MOV, whose H.264 Chromium reads with the same demuxer.
+/// Audio Chromium cannot decode plays as silence with no error event, so the frontend's fallback
+/// cannot catch it; whatever is left out takes the proxy. DTS decoded nothing in either browser.
+/// AC-3 and E-AC-3 decoded in WebView2 on the owner's machine but not in Chrome: Edge hands them
+/// to the Windows Dolby decoder, which not every Windows install has, so like HEVC they depend on
+/// the PC. PCM decoded in both but is outside the set the owner asked to admit.
+const MP4_AUDIO_CODECS: [&str; 5] = ["aac", "mp3", "opus", "vorbis", "flac"];
+const MATROSKA_AUDIO_CODECS: [&str; 5] = ["aac", "mp3", "opus", "vorbis", "flac"];
+
+/// A container family the player reads, as far as the allowlist is concerned.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Container {
+    /// ffprobe's `mov,mp4,...` family, which also covers MOV: Chromium reads both with one demuxer.
+    Mp4,
+    /// MKV and WebM.
+    Matroska,
+}
+
+/// The container of `source`, if it is one the player reads.
+///
+/// ffprobe names MKV and WebM alike (`format_name` `matroska,webm`; only the EBML DocType
+/// differs), and Chromium reads both with one Matroska demuxer: a WebM-named MKV holding FLAC
+/// played like the MKV. So the extension does not pick a demuxer; it only limits direct play to the
+/// names that were tested, `.mkv` and `.webm`. Any other name for a Matroska file (`.mka`, `.mk3d`,
+/// a misnamed file) takes the proxy.
+fn container(info: &SourceInfo, source: &Path) -> Option<Container> {
+    let mut demuxers = info.container.split(',').map(str::trim);
+    let has_extension = |wanted: &str| {
+        source
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case(wanted))
+    };
+    if demuxers.clone().any(|name| name == "mp4") {
+        Some(Container::Mp4)
+    } else if demuxers.any(|name| name == "matroska")
+        && (has_extension("mkv") || has_extension("webm"))
+    {
+        Some(Container::Matroska)
+    } else {
+        None
+    }
+}
+
+/// Plays the source itself when its video is H.264, VP9 or AV1, its container MP4 or Matroska
+/// (`.mkv` or `.webm`), and its audio absent or a codec WebView2 decodes in that container; anything
+/// else gets a proxy.
+///
+/// The frontend still falls back to a proxy if the player reports an error on the source, or shows
+/// no picture, which catches files the allowlist admits but WebView2 rejects (e.g. 10-bit or 4:4:4
+/// H.264). Undecodable audio raises neither, which is why the audio codec is checked here.
 pub fn choose_preview_source(info: &SourceInfo, source: &Path) -> PreviewSource {
-    let codec_ok = PLAYABLE_CODECS.contains(&info.video_codec.as_str());
-    let demuxers = || info.container.split(',').map(str::trim);
-    let is_webm = source
-        .extension()
-        .is_some_and(|ext| ext.eq_ignore_ascii_case("webm"));
-    let container_ok =
-        demuxers().any(|name| name == "mp4") || (is_webm && demuxers().any(|name| name == "webm"));
-    if codec_ok && container_ok {
+    let video_ok = PLAYABLE_VIDEO_CODECS.contains(&info.video_codec.as_str());
+    let audio_ok = |playable: &[&str]| {
+        info.audio_codec
+            .as_deref()
+            .is_none_or(|codec| playable.contains(&codec))
+    };
+    let container_ok = match container(info, source) {
+        Some(Container::Mp4) => audio_ok(&MP4_AUDIO_CODECS),
+        Some(Container::Matroska) => audio_ok(&MATROSKA_AUDIO_CODECS),
+        None => false,
+    };
+    if video_ok && container_ok {
         PreviewSource::Source
     } else {
         PreviewSource::Proxy
@@ -92,7 +141,7 @@ pub fn proxy_args(source: &Path, info: &SourceInfo, output: &Path) -> Vec<OsStri
     .into();
     args.push(source.into());
     args.extend(["-map", "0:V:0"].map(OsString::from));
-    if info.has_audio {
+    if info.has_audio() {
         args.extend(["-map", "0:a:0"].map(OsString::from));
     }
     args.extend(
@@ -112,7 +161,7 @@ pub fn proxy_args(source: &Path, info: &SourceInfo, output: &Path) -> Vec<OsStri
         ]
         .map(OsString::from),
     );
-    if info.has_audio {
+    if info.has_audio() {
         args.extend(["-c:a", "aac", "-b:a", "128k", "-ac", "2"].map(OsString::from));
     }
     args.extend(["-movflags", "+faststart", "-f", "mp4"].map(OsString::from));
@@ -272,35 +321,101 @@ mod tests {
             frame_rate: 30.0,
             video_codec: codec.to_owned(),
             container: container.to_owned(),
-            has_audio: true,
+            audio_codec: Some("aac".to_owned()),
         }
+    }
+
+    fn choose_with(video: &str, audio: Option<&str>, container: &str, file: &str) -> PreviewSource {
+        let mut info = info(video, container);
+        info.audio_codec = audio.map(str::to_owned);
+        choose_preview_source(&info, Path::new(file))
     }
 
     fn choose(codec: &str, container: &str, file: &str) -> PreviewSource {
         choose_preview_source(&info(codec, container), Path::new(file))
     }
 
+    /// Every pair confirmed in WebView2, with each video codec, and with no audio at all.
     #[test]
-    fn allowed_codecs_in_mp4_or_webm_play_the_source() {
-        for codec in ["h264", "vp9", "av1"] {
-            assert_eq!(choose(codec, MP4, "clip.mp4"), PreviewSource::Source);
-            assert_eq!(choose(codec, MP4, "clip.MOV"), PreviewSource::Source);
+    fn confirmed_video_and_audio_in_mp4_or_matroska_play_the_source() {
+        let audio = [
+            None,
+            Some("aac"),
+            Some("mp3"),
+            Some("opus"),
+            Some("vorbis"),
+            Some("flac"),
+        ];
+        for video in ["h264", "vp9", "av1"] {
+            for audio in audio {
+                for (container, file) in [
+                    (MP4, "clip.mp4"),
+                    (MP4, "clip.MOV"),
+                    (MATROSKA, "clip.mkv"),
+                    (MATROSKA, "clip.MKV"),
+                    (MATROSKA, "clip.WebM"),
+                ] {
+                    assert_eq!(
+                        choose_with(video, audio, container, file),
+                        PreviewSource::Source,
+                        "{video} + {audio:?} in {file}"
+                    );
+                }
+            }
         }
-        for codec in ["vp9", "av1"] {
-            assert_eq!(choose(codec, MATROSKA, "clip.WebM"), PreviewSource::Source);
+    }
+
+    /// The owner's 4K recording: H.264 with FLAC in MKV.
+    #[test]
+    fn h264_with_flac_in_mkv_plays_the_source() {
+        assert_eq!(
+            choose_with(
+                "h264",
+                Some("flac"),
+                MATROSKA,
+                "190422 Twice - Turn it up.mkv"
+            ),
+            PreviewSource::Source
+        );
+    }
+
+    /// These decode to silence with no error event, which the frontend's fallback cannot see.
+    #[test]
+    fn audio_webview2_does_not_decode_gets_a_proxy() {
+        for audio in [
+            "ac3",
+            "eac3",
+            "dts",
+            "truehd",
+            "pcm_s16le",
+            "alac",
+            "unknown",
+        ] {
+            for (container, file) in [(MP4, "clip.mp4"), (MATROSKA, "clip.mkv")] {
+                assert_eq!(
+                    choose_with("h264", Some(audio), container, file),
+                    PreviewSource::Proxy,
+                    "{audio} in {file}"
+                );
+            }
         }
     }
 
     #[test]
-    fn mkv_gets_a_proxy_whatever_its_codec() {
-        for codec in ["h264", "vp9", "av1", "hevc"] {
-            assert_eq!(choose(codec, MATROSKA, "clip.mkv"), PreviewSource::Proxy);
+    fn matroska_under_another_name_gets_a_proxy() {
+        for file in ["clip.mka", "clip.mk3d", "clip.avi", "clip"] {
+            assert_eq!(
+                choose("h264", MATROSKA, file),
+                PreviewSource::Proxy,
+                "{file}"
+            );
         }
     }
 
     #[test]
     fn hevc_always_gets_a_proxy() {
         assert_eq!(choose("hevc", MP4, "clip.mp4"), PreviewSource::Proxy);
+        assert_eq!(choose("hevc", MATROSKA, "clip.mkv"), PreviewSource::Proxy);
         assert_eq!(choose("hevc", MATROSKA, "clip.webm"), PreviewSource::Proxy);
     }
 
@@ -309,6 +424,7 @@ mod tests {
         for (codec, container, file) in [
             ("mpeg4", MP4, "a.mp4"),
             ("prores", MP4, "a.mov"),
+            ("mpeg2video", MATROSKA, "a.mkv"),
             ("h264", "avi", "a.avi"),
             ("h264", "mpegts", "a.ts"),
             ("vp9", "ogg", "a.webm"),
@@ -380,7 +496,7 @@ mod tests {
     #[test]
     fn proxy_args_leave_audio_out_for_a_silent_source() {
         let mut silent = info("hevc", MATROSKA);
-        silent.has_audio = false;
+        silent.audio_codec = None;
         let args = args_text(&silent);
         assert!(!args.iter().any(|arg| arg == "-c:a" || arg == "0:a:0"));
     }

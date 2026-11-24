@@ -81,7 +81,7 @@ fn info(width: u32, height: u32, duration: f64, codec: &str, has_audio: bool) ->
         frame_rate: 25.0,
         video_codec: codec.to_owned(),
         container: "matroska,webm".to_owned(),
-        has_audio,
+        audio_codec: has_audio.then(|| "aac".to_owned()),
     }
 }
 
@@ -429,4 +429,82 @@ fn thumbnails_are_a_strip_of_24_frames_72_high_kept_until_the_source_is_replaced
         !thumbnails[0].parent().unwrap().exists(),
         "the replaced source's thumbnails must be deleted"
     );
+}
+
+#[test]
+fn closing_the_source_mid_build_stops_ffmpeg_and_leaves_no_proxy() {
+    let clips = TempDir::new().unwrap();
+    let source = long_clip(clips.path(), "long.mp4");
+    let (_temp, _root, previewer) = previewer();
+    previewer.open(source.clone(), info(1920, 1080, 20.0, "hevc", false));
+
+    let (started, running) = mpsc::channel();
+    thread::scope(|scope| {
+        let build = scope.spawn(|| {
+            previewer.proxy(&source, ffmpeg_path, move |_| {
+                let _ = started.send(());
+            })
+        });
+        running
+            .recv_timeout(Duration::from_secs(30))
+            .expect("the build never reported progress");
+        assert_eq!(
+            proxies_in(&previewer).len(),
+            1,
+            "a partial proxy is being written"
+        );
+
+        let closed_at = Instant::now();
+        previewer.close(&source);
+        assert_eq!(build.join().unwrap(), Err(PreviewError::Cancelled));
+        assert!(closed_at.elapsed() < Duration::from_secs(5));
+    });
+
+    // Windows cannot delete a file ffmpeg still has open, so an empty folder means it exited.
+    assert_eq!(proxies_in(&previewer), Vec::<PathBuf>::new());
+    assert_eq!(
+        previewer.proxy(&source, ffmpeg_path, |_| {}),
+        Err(PreviewError::NotOpen {
+            path: source.display().to_string()
+        })
+    );
+}
+
+#[test]
+fn closing_the_source_deletes_its_proxy_and_thumbnails() {
+    let clips = TempDir::new().unwrap();
+    let source = hevc_mkv(clips.path());
+    let (_temp, _root, previewer) = previewer();
+    previewer.open(source.clone(), info(1440, 1080, 2.0, "hevc", true));
+    let proxy = previewer.proxy(&source, ffmpeg_path, |_| {}).unwrap();
+    let thumbnails = previewer.thumbnails(&source, ffmpeg_path).unwrap();
+    assert_eq!(
+        proxies_in(&previewer).len(),
+        2,
+        "the proxy and the thumbnail folder"
+    );
+
+    previewer.close(&source);
+
+    assert!(!proxy.exists());
+    assert!(!thumbnails[0].parent().unwrap().exists());
+    assert_eq!(proxies_in(&previewer), Vec::<PathBuf>::new());
+    assert!(source.exists(), "closing never touches the source");
+}
+
+#[test]
+fn closing_a_source_that_is_not_open_leaves_the_open_one_alone() {
+    let clips = TempDir::new().unwrap();
+    let open = hevc_mkv(clips.path());
+    let replaced = clips.path().join("replaced.mkv");
+    std::fs::copy(&open, &replaced).unwrap();
+    let (_temp, _root, previewer) = previewer();
+    previewer.open(open.clone(), info(1440, 1080, 2.0, "hevc", true));
+    let proxy = previewer.proxy(&open, ffmpeg_path, |_| {}).unwrap();
+
+    previewer.close(&replaced);
+
+    assert!(proxy.exists());
+    let no_ffmpeg = || -> Option<PathBuf> { panic!("the kept proxy must not be rebuilt") };
+    assert_eq!(previewer.proxy(&open, no_ffmpeg, |_| {}).unwrap(), proxy);
 }

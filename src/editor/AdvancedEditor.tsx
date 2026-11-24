@@ -4,6 +4,7 @@ import { IoIosCloseCircle } from 'react-icons/io';
 import AdvancedPreview from './AdvancedPreview';
 import AdvancedSettingsForm from './AdvancedSettingsForm';
 import SessionResults from './SessionResults';
+import { hasAudio } from '../ipc/probe';
 import { fileName, type OpenSource } from './useSource';
 import { useClipShortcuts } from './useClipShortcuts';
 import VideoTrimmer from './VideoTrimmer';
@@ -105,7 +106,7 @@ export default function AdvancedEditor({
         crop,
         settings: { ...settings, fileTypes },
         width: size.width,
-        keepSound: settings.keepSound && info.hasAudio,
+        keepSound: settings.keepSound && hasAudio(info),
         captions,
         outputSeconds: seconds,
       });
@@ -191,7 +192,7 @@ export default function AdvancedEditor({
             onChange={onSettingsChange}
             outputWidth={size.width}
             nativeWidth={size.native}
-            hasAudio={info.hasAudio}
+            hasAudio={hasAudio(info)}
           />
         </fieldset>
         <div className='flex flex-col gap-2'>
