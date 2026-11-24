@@ -1,0 +1,72 @@
+# Document index
+
+These documents live under `docs/` and are tracked in Git: commit document changes with the work they describe, and keep credentials and unneeded personal data out of them. Read only what the task needs. Current user decisions, code, configuration and maintained public docs outrank these documents: when one disagrees with a document, correct the document; when two of them disagree with each other, ask the user.
+
+## Project in one paragraph
+
+video-to-gif is a Windows-first desktop app that turns a video into GIF, WebP and MP4 with everything the advanced mode of [mgck's Discord GIF tool](https://mgck.ink/discordgifs) offers, by running the user's own `ffmpeg` and `ffprobe` from PATH. Because ffmpeg runs natively, it takes any source that ffmpeg can read, at any size, including the AV1, HEVC and MKV files and multi-GB recordings the browser version fails on. It is Tauri 2: a Rust backend that owns ffmpeg, and a React + TypeScript + Vite + Tailwind frontend in WebView2, talking over Tauri IPC. The root `README.md` is the public page. Status: VTG-2 done: the app opens an empty window, `pnpm check` runs every check, and these docs exist. No feature works yet; VTG-3 (find ffmpeg, probe a source) is next.
+
+## The plan: YouTrack project `VTG`
+
+The plan and all issues live in YouTrack project `VTG` ("video-to-gif"), read and updated through the `youtrack` MCP tools. Epic **VTG-1** holds the payoff, the settled decisions (recorded here as ADRs), the reference repos, the v0 scope and the ordered list of child Tasks. Open work is `project: VTG #Unresolved`; the Task being worked is the one in state In Progress. Each Task holds its Steps as a checklist and ends on a **Done when** line.
+
+- Work the Tasks in VTG-1's order, one at a time.
+- When a Step lands, tick it in the Task's description and add a comment saying what changed and in which commit.
+- Resolve a Task once its Done when line is verified, then move the next Task to In Progress.
+- To change a decision or the scope in VTG-1, ask the user first. Then record the change in VTG-1 with its date and reason, and supersede the matching ADR here.
+
+## Working rules for agents
+
+- Commit with Conventional Commits messages, using the `conventional-commits` skill.
+- Record project facts, decisions and the owner's preferences in this collection rather than in agent memory, so the owner can read and edit them.
+- [The v0 scope decision](decisions/2026-11-24-v0-scope.md) decides what gets built; mgck's behaviour is the spec within it. When a feature is in neither, ask before building it.
+- The reference repos are read-only: read them, never edit them.
+  - **mgck**, the web version and the UI this app copies: `C:\code\python\web\mgck`. Advanced mode is `frontend/src/app/discordgifs/_components/AdvancedEditor.tsx`; the rest is in that folder, `frontend/src/lib/discordgifs/` and `frontend/src/hooks/discordgifs/`, with tests in `frontend/src/__tests__/discordgifs-*`. It runs ffmpeg.wasm, so its comments about Wasm memory and missing encoders describe limits this app does not have.
+  - **gif-studio**, a friend's local-ffmpeg GIF tool whose filter chain mgck's advanced mode ported: `C:\code\oss\repos\gif-studio` (v1.1.1, `0ce6130`), one `server.js` plus `index.html`. Prior art for spawning ffmpeg with `-progress pipe:1`, preview proxies, timeline strips and job handling. Its known defects are listed in YouTrack OSS-4; each VTG Task names the ones it must avoid.
+
+## Where to look
+
+| Location | Purpose and retention |
+| --- | --- |
+| [context/glossary.md](context/glossary.md) | The ubiquitous language. Update when a concept is added, renamed or retired. |
+| [context/architecture.md](context/architecture.md) | Repo shape, slices and layers, the IPC boundary, finding ffmpeg. Rewrite a section when the code it describes changes; add one when a Task builds something new. |
+| [decisions/2026-11-24-v0-scope.md](decisions/2026-11-24-v0-scope.md) | What v0 builds and what waits. Supersede with a new ADR when scope changes. |
+| [decisions/2026-11-24-tauri-2.md](decisions/2026-11-24-tauri-2.md) | Why Tauri 2 with a React frontend, over Electron and a native Rust GUI. Supersede if the app framework changes. |
+| [decisions/2026-11-24-windows-first.md](decisions/2026-11-24-windows-first.md) | Windows is the only tested platform; other platforms cost nothing extra. Supersede when another platform is tested. |
+| [decisions/2026-11-24-users-ffmpeg.md](decisions/2026-11-24-users-ffmpeg.md) | v0 runs `ffmpeg` and `ffprobe` from PATH. Supersede when ffmpeg is bundled or downloaded. |
+| [decisions/2026-11-24-ui-copied-from-mgck.md](decisions/2026-11-24-ui-copied-from-mgck.md) | The editor UI is copied from mgck and drifts independently. Supersede if the two share code. |
+| [decisions/2026-11-24-rust-owns-ffmpeg.md](decisions/2026-11-24-rust-owns-ffmpeg.md) | The frontend sends intent over IPC; Rust builds arguments and runs ffmpeg. Supersede if that split changes. |
+| [decisions/2026-11-24-preview-source-or-proxy.md](decisions/2026-11-24-preview-source-or-proxy.md) | Preview plays the source or a proxy; export always reads the source. Supersede if preview changes. |
+| [decisions/2026-11-24-real-paths.md](decisions/2026-11-24-real-paths.md) | Sources arrive as filesystem paths and are never copied. Supersede if sources arrive another way. |
+| [decisions/2026-11-24-vertical-slices.md](decisions/2026-11-24-vertical-slices.md) | Why the Rust crate is vertical slices with inward-pointing layers, and when a slice gains a layer. Supersede if the layout changes. |
+| YouTrack project `VTG` ("video-to-gif") | The plan, Tasks, bugs and deferred work; see *The plan* above. |
+
+## Language
+
+[context/glossary.md](context/glossary.md) is the project's ubiquitous language. Name things with its terms in conversation, code, UI copy, docs and commits. A new concept gets its row in the same change that introduces it. When two names compete or a term stops fitting, ask the user, then rename everywhere or move the old name under *Avoid*. Terms copied from mgck's code keep their meaning here unless the glossary says otherwise.
+
+## Where new documents go
+
+Before writing, search the index and documents for the topic; extend the owning document when one exists. Load the `writing-for-agents` skill before creating or editing any document here, and the `humanizer` skill before editing the root `README.md`.
+
+- `context/`: current architecture, conventions, operations and gotchas. One home per topic; point to code and configuration rather than copying them.
+- `decisions/YYYY-MM-DD-topic.md`: ADRs with status (`Proposed`, `Accepted`, `Superseded`), context, decision and consequences. They record rationale, not live state. Mark a superseded ADR and link its replacement.
+- `plans/active/`: substantial unfinished work that no VTG Task already describes, with date, status, scope and acceptance criteria. On completion, move lasting rationale to `decisions/` and current guidance to `context/`, then delete the plan, or move it to `plans/completed/` while its evidence still matters.
+- `research/` and `audits/`: dated findings with sources and status. An audit finding closes only on execution evidence.
+- `artifacts/<task>/`: temporary outputs and helpers. Delete them once the task is verified.
+
+A bug, idea or backlog item the user decides to defer becomes an issue in YouTrack project `VTG`, not a document. Raise findings, proposals and questions in chat as usual; open an issue only for work the user has chosen to defer.
+
+Create a folder only when it receives a document. This index is the only file at the docs root.
+
+## Keeping it current
+
+A change is finished only when these documents describe it. Before reporting or committing:
+
+1. **Find.** Search this collection for the names, paths, commands and terms the change touched. Documents you never opened go stale too. Done when every hit is updated or confirmed still true.
+2. **Replace.** Rewrite changed guidance where it lives, following `writing-for-agents`, so each section reads as current truth on its own. Keep the *Status* sentence in *Project in one paragraph* true.
+3. **One home.** Each fact lives in the document the index names for its topic; everywhere else links to it. Merge any copies the change created or exposed.
+4. **Lifecycle.** Plans show actual progress, and finished plans leave `plans/active/`. Delete consumed handovers, status snapshots and verified artifacts once their unique facts have moved. Ask before deleting user-authored or uncertain material.
+5. **Language.** Every concept the change introduced or renamed has its glossary row, and no avoided name came back.
+6. **Index.** Rows and inbound links match every added, moved or deleted path.
+7. **Issues.** Every VTG Step the change landed is ticked, with a comment saying what changed and in which commit; every Task whose Done when line the change verified is resolved.
