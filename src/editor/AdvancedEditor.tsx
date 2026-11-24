@@ -19,7 +19,6 @@ import {
   fileTypeOrder,
   formatBytes,
   frameCount,
-  isLargeGif,
   isSideways,
   outputSeconds,
   outputSize,
@@ -109,8 +108,6 @@ export default function AdvancedEditor({
   const selectionSeconds = trim ? trim.end - trim.start : info.duration;
   const seconds = outputSeconds(selectionSeconds, settings);
   const frames = frameCount(seconds, settings.fps);
-  const largeGif =
-    settings.fileTypes.includes('gif') && isLargeGif(size, frames);
   const memory = useMemoryEstimate({ info, trim, crop, settings });
   // The engine refuses a run whose held frames exceed free memory; say so before Convert.
   const tooBig = memory !== null && !memory.fits;
@@ -220,7 +217,6 @@ export default function AdvancedEditor({
           size={size}
           seconds={seconds}
           frames={frames}
-          largeGif={largeGif}
         />
         {/* A fieldset defaults to min-width: min-content, so without min-w-0
             wide settings rows push past the column instead of shrinking. */}

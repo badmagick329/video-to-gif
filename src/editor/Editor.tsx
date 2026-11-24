@@ -15,8 +15,8 @@ import {
 import { ClipCrop, ClipTrim } from './lib/types';
 
 /**
- * The app's main view: mgck's Discord GIF page in advanced mode, without the
- * site's chrome. It holds the clip's trim, crop and settings; the source and
+ * The app's main view: one clip in the editor. It holds the clip's trim, crop
+ * and settings; the source and
  * its preview come from `useSource`, exports and their results from
  * `useExport`, and where they are saved from `useDestination`.
  */
@@ -41,10 +41,6 @@ export default function Editor() {
     <main className='flex min-h-dvh w-full flex-col bg-background-dg'>
       <h1 className='sr-only'>video-to-gif</h1>
       <div className='flex w-full grow flex-col items-center gap-5 px-2 py-5'>
-        <p className='max-w-2xl text-center text-sm text-foreground-dg/80'>
-          Convert one clip to GIF, WebP or MP4 with your own width, frame rate
-          and quality. Nothing is sized for Discord&apos;s limits.
-        </p>
         <button
           type='button'
           className={clsx(
@@ -62,11 +58,11 @@ export default function Editor() {
               anything your ffmpeg can read, at any size
             </span>
           </span>
-          <span className='text-xs'>
-            {state.stage === 'open'
-              ? 'Opening another clip replaces this one.'
-              : 'Advanced mode converts one clip at a time.'}
-          </span>
+          {state.stage === 'open' && (
+            <span className='text-xs'>
+              Opening another clip replaces this one.
+            </span>
+          )}
         </button>
         {state.stage === 'probing' && (
           <p aria-busy='true'>Opening {fileName(state.path)}…</p>

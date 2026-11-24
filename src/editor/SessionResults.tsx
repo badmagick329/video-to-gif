@@ -5,13 +5,6 @@ import { SessionResult } from './lib/types';
 import { fileTypeInfo, formatBytes } from './lib/advanced';
 
 /**
- * Discord's upload limit for free accounts: 20 MB per file since August 2026
- * (Discord's File Attachments FAQ). Counted in decimal megabytes so the
- * warning errs early; Discord's UI has refused files near its stated caps.
- */
-const discordFreeUploadLimit = { bytes: 20 * 1000 * 1000, label: '20 MB' };
-
-/**
  * Gif Studio's *Made this session* list, as mgck shows it. Each output plays
  * in place through the asset protocol, and Open and Show in folder take the
  * place of mgck's Download link, since the file is already on disk.
@@ -104,7 +97,6 @@ function OutputRow({
 }) {
   const [problem, setProblem] = useState('');
   const label = fileTypeInfo[result.fileType].label;
-  const overLimit = result.size > discordFreeUploadLimit.bytes;
 
   const act = (action: (path: string) => Promise<void>) => () => {
     setProblem('');
@@ -141,12 +133,7 @@ function OutputRow({
           </p>
           <p className='text-xs text-foreground-dg/70'>
             <span className='font-semibold text-foreground-dg'>{label}</span> ·{' '}
-            {result.width} × {result.height} ·{' '}
-            <span className={overLimit ? 'text-amber-300' : undefined}>
-              {formatBytes(result.size)}
-            </span>
-            {overLimit &&
-              ` · over Discord's ${discordFreeUploadLimit.label} free upload limit`}
+            {result.width} × {result.height} · {formatBytes(result.size)}
           </p>
         </div>
       </div>

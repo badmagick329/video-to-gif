@@ -250,14 +250,6 @@ export function frameCount(seconds: number, fps: number): number {
   return Math.max(1, Math.round(seconds * fps));
 }
 
-/**
- * Gif Studio's threshold: about 300 frames at 480 × 270. Past it a GIF is
- * usually tens of megabytes and slow to encode.
- */
-export function isLargeGif(size: Size, frames: number): boolean {
-  return size.width * size.height * frames > 480 * 270 * 300;
-}
-
 export function formatBytes(bytes: number): string {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KiB`;
   if (bytes < 1024 ** 3) return `${(bytes / 1024 / 1024).toFixed(1)} MiB`;

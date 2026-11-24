@@ -207,7 +207,7 @@ export default function VideoTrimmer({
       disabled={disabled}
       className='flex w-full min-w-0 flex-col gap-3 text-left disabled:opacity-60'
     >
-      <legend className='mb-2 font-semibold'>Choose your clip</legend>
+      <legend className='sr-only'>Selection</legend>
       <VideoCropper
         dimensions={dimensions}
         crop={crop}

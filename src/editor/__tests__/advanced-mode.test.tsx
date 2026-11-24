@@ -12,7 +12,6 @@ import {
   defaultAdvancedSettings,
   forNewClip,
   frameCount,
-  isLargeGif,
   outputSeconds,
   outputSize,
   rotate,
@@ -358,10 +357,8 @@ describe('Advanced mode output numbers', () => {
     expect(outputSize(640, narrow)).toEqual({ width: 300, height: 538, native: 300 });
   });
 
-  test('frame count and the big-GIF warning follow Gif Studio', () => {
+  test('frame count rounds output seconds at the frame rate', () => {
     expect(frameCount(5, 15)).toBe(75);
     expect(frameCount(2.2, 15)).toBe(33);
-    expect(isLargeGif({ width: 480, height: 270 }, 300)).toBe(false);
-    expect(isLargeGif({ width: 480, height: 270 }, 301)).toBe(true);
   });
 });

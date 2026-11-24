@@ -6,8 +6,8 @@ export type Size = { width: number; height: number };
 export type SourceRect = Size & { x: number; y: number };
 
 /**
- * How a host app fits an image into a square box: Discord contains emoji and
- * stickers and crops avatars to fill a circle.
+ * How the drawing fits its square box: contain shows the whole output at its
+ * aspect; cover fills the box from the output's centre.
  */
 export type PreviewFit = 'contain' | 'cover';
 
@@ -62,8 +62,9 @@ export function fitToBox(
 
 /**
  * Canvas pixels for a drawing shown at `display` CSS pixels. Sharp on dense
- * screens, but never sharper than the output itself, so a preview Discord
- * enlarges (a 140 px sticker in a 160 px box) looks as soft as the real file.
+ * screens, but never sharper than the output itself, so a preview shown
+ * larger than the file (a 140 px output in a 160 px box) looks as soft as the
+ * real file.
  */
 export function canvasResolution(
   display: Size,

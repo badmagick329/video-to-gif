@@ -63,7 +63,7 @@ describe('preview maths', () => {
 
   test('canvas pixels follow the screen but never exceed the output', () => {
     const kept = cropSourceRect(undefined, frame);
-    // A 140 px sticker in Discord's 160 px box stays 140 pixels across.
+    // A 140 px output shown in a 160 px box stays 140 pixels across.
     const sticker = fitToBox(kept, 160, 'contain');
     expect(
       canvasResolution(sticker.display, sticker.source, kept, 140, 2)

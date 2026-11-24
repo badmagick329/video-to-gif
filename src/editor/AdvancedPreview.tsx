@@ -25,7 +25,6 @@ export default function AdvancedPreview({
   size,
   seconds,
   frames,
-  largeGif,
 }: {
   video: HTMLVideoElement | null;
   crop?: ClipCrop;
@@ -43,7 +42,6 @@ export default function AdvancedPreview({
   size: Size | null;
   seconds: number | null;
   frames: number | null;
-  largeGif: boolean;
 }) {
   return (
     <figure
@@ -93,14 +91,6 @@ export default function AdvancedPreview({
             </span>
           )}
           {frames !== null && <span className={pill}>{frames} frames</span>}
-          {largeGif && (
-            <span
-              role='status'
-              className={`${pill} border-amber-600/70 bg-amber-950/40 text-amber-200`}
-            >
-              Big GIF. Try fewer frames or a smaller width.
-            </span>
-          )}
         </div>
       )}
     </figure>
