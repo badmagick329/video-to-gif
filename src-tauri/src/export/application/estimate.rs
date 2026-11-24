@@ -4,13 +4,9 @@
 //!
 //! Samples are the user's own export at below-normal priority, written to the session's temp
 //! folder and deleted as soon as they are measured. The methods are in
-//! [`crate::export::domain::estimate`]. A selection up to 20 s is sampled by one ffmpeg that
-//! decodes it once for every file type; a longer one gets a run per file type (a run per window
-//! for WebP), all at once, each settling as it finishes.
-//!
-//! Timed on a busy 1080p VP9 clip with GIF, WebP and MP4 ticked (12-thread PC): at 480 px/15 fps
-//! every figure was in after 2.8 s for a 5 s selection and 3.9 s for 20 s; at 640 px/24 fps,
-//! 5.6 s and 7.7 s, almost all of it the GIF's `palettegen` and `paletteuse` over 72 frames.
+//! [`crate::export::domain::estimate`]. For a selection up to 20 s, GIF and WebP share one ffmpeg
+//! that decodes it once; a longer one gets a run per file type (a run per window for WebP). MP4
+//! always runs on its own. Everything runs at once and each file type settles as it finishes.
 
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
@@ -150,37 +146,48 @@ pub fn estimate(
         control,
         captions: captions.as_ref().map(CaptionFile::path),
     };
-    if plan.selection.selection_seconds <= SHARED_MAX_SECONDS {
-        let estimates = run.shared();
-        estimates.iter().for_each(on_estimate);
-        return estimates;
-    }
-    thread::scope(|scope| {
-        let handles: Vec<_> = plan
-            .selection
-            .settings
-            .file_types
-            .iter()
-            .map(|&file_type| {
-                let run = &run;
-                scope.spawn(move || {
-                    let estimate = run.separate(file_type);
-                    on_estimate(&estimate);
-                    estimate
-                })
-            })
-            .collect();
+    let file_types = &plan.selection.settings.file_types;
+    // Short selections share one decode between GIF and WebP. MP4 always runs on its own: a
+    // streaming x264 output beside a GIF that holds every frame for its palette deadlocked
+    // ffmpeg's scheduler (ffmpeg 9.0, a 1080p H.264 talk; GIF with WebP did not).
+    let (shared, own): (Vec<FileType>, Vec<FileType>) =
+        if plan.selection.selection_seconds <= SHARED_MAX_SECONDS {
+            file_types
+                .iter()
+                .partition(|&&file_type| file_type != FileType::Mp4)
+        } else {
+            (Vec::new(), file_types.clone())
+        };
+    let run = &run;
+    let mut estimates: Vec<SizeEstimate> = thread::scope(|scope| {
+        let mut handles = Vec::new();
+        if !shared.is_empty() {
+            let shared = &shared;
+            handles.push(scope.spawn(move || {
+                let estimates = run.shared(shared);
+                estimates.iter().for_each(on_estimate);
+                estimates
+            }));
+        }
+        for &file_type in &own {
+            handles.push(scope.spawn(move || {
+                let estimate = run.separate(file_type);
+                on_estimate(&estimate);
+                vec![estimate]
+            }));
+        }
         handles
             .into_iter()
-            .map(|handle| handle.join().expect("estimate thread panicked"))
+            .flat_map(|handle| handle.join().expect("estimate thread panicked"))
             .collect()
-    })
+    });
+    estimates.sort_by_key(SizeEstimate::file_type);
+    estimates
 }
 
-/// The longest selection sampled by one shared run ([`shared_sample_args`]). Up to here, decoding
-/// the selection once costs no more than decoding each window from its keyframe, and MP4 decodes it
-/// all anyway. Past it, each file type runs on its own, so GIF and WebP need not wait for a long
-/// MP4, and windows decode only around themselves.
+/// The longest selection whose GIF and WebP share one run ([`shared_sample_args`]). Up to here,
+/// decoding the selection once costs no more than decoding each window from its keyframe. Past
+/// it, each file type runs on its own and windows decode only around themselves.
 const SHARED_MAX_SECONDS: f64 = 20.0;
 
 /// What every sample of one estimate shares.
@@ -276,9 +283,8 @@ impl Run<'_> {
         }
     }
 
-    /// Every file type from one ffmpeg that decodes the selection once.
-    fn shared(&self) -> Vec<SizeEstimate> {
-        let file_types = &self.plan.selection.settings.file_types;
+    /// `file_types` (GIF and WebP) from one ffmpeg that decodes the selection once.
+    fn shared(&self, file_types: &[FileType]) -> Vec<SizeEstimate> {
         let input_trim = SinglePass::from_plan(self.plan, FileType::Gif, Path::new(""), None).trim;
         let input_start = input_trim.map_or(0.0, |trim| trim.seek);
         let span = |window: &InputTrim| Span {

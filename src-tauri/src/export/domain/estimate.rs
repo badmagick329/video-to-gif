@@ -221,6 +221,16 @@ pub enum SizeEstimate {
     Cancelled { file_type: FileType },
 }
 
+impl SizeEstimate {
+    pub fn file_type(&self) -> FileType {
+        match self {
+            SizeEstimate::Done { file_type, .. }
+            | SizeEstimate::Failed { file_type, .. }
+            | SizeEstimate::Cancelled { file_type } => *file_type,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use serde_json::json;
