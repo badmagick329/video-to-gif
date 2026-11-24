@@ -24,7 +24,7 @@ export type ExportJob = {
   cancelling: boolean;
 };
 
-/** What the editor says under Convert when a run ends or cannot start. */
+/** What the editor says under Export when a run ends or cannot start. */
 export type ExportNotice = {
   text: string;
   /** Shown in an expandable section: ffmpeg's error tail, or the reason Rust gave. */
@@ -76,7 +76,7 @@ function summary(outputs: readonly ExportOutput[], folder: string): ExportNotice
     };
   if (failed.length > 0)
     return {
-      text: `${labels(failed)} failed; ffmpeg's error is under Made this session.${saved}`,
+      text: `${labels(failed)} failed; ffmpeg's error is in the Exports tab.${saved}`,
       failed: true,
     };
   return { text: `Saved ${labels(done)} to ${folder}.`, failed: false };
@@ -85,7 +85,7 @@ function summary(outputs: readonly ExportOutput[], folder: string): ExportNotice
 /** Words an ExportError, which stops a run before any file type starts. */
 function startFailure(error: unknown): ExportNotice {
   if (!isExportError(error))
-    return { text: 'Converting failed.', details: String(error), failed: true };
+    return { text: 'Exporting failed.', details: String(error), failed: true };
   switch (error.kind) {
     case 'notFound':
       return { text: `The video is no longer at ${error.path}.`, failed: true };
@@ -96,13 +96,13 @@ function startFailure(error: unknown): ExportNotice {
       };
     case 'invalidRequest':
       return {
-        text: 'These settings cannot be converted.',
+        text: 'These settings cannot be exported.',
         details: error.reason,
         failed: true,
       };
     case 'ffmpegMissing':
       return {
-        text: 'ffmpeg was not found on PATH, so nothing can be converted.',
+        text: 'ffmpeg was not found on PATH, so nothing can be exported.',
         failed: true,
       };
     case 'notEnoughMemory':
@@ -111,7 +111,7 @@ function startFailure(error: unknown): ExportNotice {
         failed: true,
       };
     case 'busy':
-      return { text: 'Another conversion is still running.', failed: true };
+      return { text: 'Another export is still running.', failed: true };
     case 'captionsFailed':
       return {
         text: 'The captions could not be prepared.',
@@ -158,7 +158,7 @@ export function useExport() {
     async (request: ExportRequest, destination: string): Promise<ExportNotice> => {
       const fileTypes = request.settings.fileTypes;
       running.current = new Set();
-      // Convert is disabled with no file type ticked, so there is a first one.
+      // Export is disabled with no file type ticked, so there is a first one.
       setJob({ fileTypes, fileType: fileTypes[0]!, done: 0, cancelling: false });
       try {
         const outputs = await runExport(request, destination);

@@ -1,7 +1,7 @@
 // Copied from mgck's __tests__/discordgifs-advanced-mode.test.tsx (the editor's controls) and the
 // settings-number tests of discordgifs-advanced-commands.test.ts. Dropped with what they covered:
 // the large-file warning and frame-memory limits (ffmpeg.wasm's), the mode switch (simple mode is
-// not in v0), and the ffmpeg command tests (export builds commands in Rust). Converting, its
+// not in v0), and the ffmpeg command tests (export builds commands in Rust). Exporting, its
 // progress and Made this session are tested in export.test.tsx.
 import { act, fireEvent, screen, within } from '@testing-library/react';
 
@@ -18,16 +18,19 @@ import {
   soundDropReason,
   speedSteps,
 } from '../lib/advanced';
-import { renderAdvancedEditor } from './harness';
+import { renderSourceEditor } from './harness';
 import {
   clipBackend,
   drop,
   mock2dCanvas,
   openClip,
-  outputDetails as details,
+  estimatedSize,
+  exportButton,
+  outputSize as details,
   renderWithListeners,
   resetTauri,
   sourceInfo,
+  ffmpegFound,
 } from './tauri';
 
 vi.mock('@tauri-apps/api/core', async () => (await import('./tauri')).core);
@@ -51,13 +54,12 @@ afterEach(() => {
 
 const press = (name: string) =>
   fireEvent.click(screen.getByRole('button', { name }));
-const convertButton = () => screen.getByRole('button', { name: /^Convert to/ });
-const convert = () => act(async () => fireEvent.click(convertButton()));
+const runExport = () => act(async () => fireEvent.click(exportButton()));
 
 /** Opens a 4-second 1280 × 720 clip with sound, played directly or through a 640 × 360 proxy. */
 async function openEditor(preview: 'source' | 'proxy' = 'source') {
   clipBackend(sourceInfo(), preview);
-  const view = await renderWithListeners(<Editor />);
+  const view = await renderWithListeners(<Editor ffmpeg={ffmpegFound} />);
   await openClip(
     'C:/videos/one.mp4',
     preview === 'proxy' ? { width: 640, height: 360 } : { width: 1280, height: 720 }
@@ -68,22 +70,25 @@ async function openEditor(preview: 'source' | 'proxy' = 'source') {
 describe('Advanced mode', () => {
   test('holds one clip: opening another replaces it', async () => {
     await openEditor();
-    expect(screen.getByRole('button', { name: 'Remove one.mp4' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Close one.mp4' })).toBeInTheDocument();
     await drop('C:/videos/two.mp4');
     expect(
-      await screen.findByRole('button', { name: 'Remove two.mp4' })
+      await screen.findByRole('button', { name: 'Close two.mp4' })
     ).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Remove one.mp4' })).toBeNull();
-    expect(screen.getAllByRole('button', { name: /^Remove / })).toHaveLength(1);
+    expect(screen.queryByRole('button', { name: 'Close one.mp4' })).toBeNull();
+    expect(screen.getAllByRole('button', { name: /^Close / })).toHaveLength(1);
   });
 
-  test('converts the ticked file types, with Made this session empty until something is made', async () => {
-    const { request } = renderAdvancedEditor({ info: sourceInfo() });
+  test('exports the ticked file types, with Made this session empty until something is made', async () => {
+    const { request } = renderSourceEditor({ info: sourceInfo() });
+    fireEvent.click(screen.getByRole('tab', { name: /^Exports/ }));
     const results = screen.getByRole('region', { name: 'Made this session' });
     expect(within(results).getByText(/Nothing yet/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('tab', { name: 'Output' }));
 
-    fireEvent.click(screen.getByRole('checkbox', { name: /MP4/ }));
-    await convert();
+    fireEvent.click(screen.getByRole('button', { name: 'MP4' }));
+    expect(exportButton()).toHaveAccessibleName('Export GIF + MP4');
+    await runExport();
     expect(request()).toMatchObject({
       path: 'C:/videos/clip.mp4',
       info: sourceInfo(),
@@ -91,12 +96,41 @@ describe('Advanced mode', () => {
     });
   });
 
-  test('no file type ticked leaves nothing to convert', async () => {
+  test('the toolbar and status bar describe the open source', async () => {
+    await openEditor('proxy');
+    expect(screen.getByText('one.mp4')).toHaveAttribute('title', 'C:/videos/one.mp4');
+    const chips = within(screen.getByRole('list', { name: 'Source details' }))
+      .getAllByRole('listitem')
+      .map((chip) => chip.textContent);
+    expect(chips).toEqual(['1280 × 720', 'H.264', '30 fps', '0:04.00', 'AAC']);
+    expect(screen.getByText('ffmpeg 9.0.1 on PATH')).toBeInTheDocument();
+    expect(screen.getByText('Playing a preview copy')).toBeInTheDocument();
+  });
+
+  test('the viewer starts side by side and remembers the mode it was left in', async () => {
+    const view = await openEditor();
+    const mode = (name: string) => screen.getByRole('button', { name });
+    expect(mode('Side by side')).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByLabelText('Move crop')).toBeInTheDocument();
+    expect(screen.getByRole('figure', { name: 'Output preview' })).toBeInTheDocument();
+
+    // Output keeps the source's video mounted, since the preview draws from it.
+    press('Output');
+    expect(screen.getByRole('figure', { name: 'Output preview' })).toBeInTheDocument();
+    expect(view.container.querySelector('video')).toBeInTheDocument();
+    press('Source');
+    expect(screen.queryByRole('figure', { name: 'Output preview' })).toBeNull();
+
+    view.unmount();
     await openEditor();
-    fireEvent.click(screen.getByRole('checkbox', { name: /GIF/ }));
-    expect(
-      screen.getByRole('button', { name: 'Pick a file type to save as' })
-    ).toBeDisabled();
+    expect(mode('Source')).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  test('no file type ticked leaves nothing to export', async () => {
+    await openEditor();
+    fireEvent.click(screen.getByRole('button', { name: 'GIF' }));
+    expect(screen.getByRole('button', { name: 'Export' })).toBeDisabled();
+    expect(estimatedSize()).toHaveTextContent('Pick at least one format');
   });
 });
 
@@ -107,17 +141,17 @@ describe.each(['source', 'proxy'] as const)(
       await openEditor(preview);
       expect(details()).toHaveTextContent('480 × 270');
       const drawing = screen.getByRole('img', { name: 'Output preview drawing' });
-      expect([drawing.style.width, drawing.style.height]).toEqual(['300px', '169px']);
+      expect([drawing.style.width, drawing.style.height]).toEqual(['474px', '267px']);
 
       press('Rotate right');
       expect(details()).toHaveTextContent('480 × 854');
       expect(screen.getByText('Turned 90°')).toBeInTheDocument();
-      expect([drawing.style.width, drawing.style.height]).toEqual(['169px', '300px']);
+      expect([drawing.style.width, drawing.style.height]).toEqual(['291px', '518px']);
 
       // 16:9 is picked in output pixels, so on the turned clip the box is a
       // 405 × 720 strip of the source and reads as 720 × 405.
       press('16:9');
-      expect(screen.getByText('Crop 720 × 405 px')).toBeInTheDocument();
+      expect(screen.getByText('Source · crop 720 × 405')).toBeInTheDocument();
       expect(details()).toHaveTextContent('480 × 270');
 
       press('Rotate right');
@@ -142,14 +176,14 @@ describe.each(['source', 'proxy'] as const)(
       await openEditor(preview);
       press('16:9');
       // The whole 16:9 frame is no crop at all.
-      expect(screen.getByText('Full frame. Drag a corner to crop.')).toBeInTheDocument();
+      expect(screen.getByText('Source · full frame, drag a corner to crop')).toBeInTheDocument();
 
       press('Rotate left');
-      expect(screen.getByText('Crop 720 × 405 px')).toBeInTheDocument();
+      expect(screen.getByText('Source · crop 720 × 405')).toBeInTheDocument();
       expect(details()).toHaveTextContent('480 × 270');
 
       press('Rotate right');
-      expect(screen.getByText('Full frame. Drag a corner to crop.')).toBeInTheDocument();
+      expect(screen.getByText('Source · full frame, drag a corner to crop')).toBeInTheDocument();
     });
 
     test('the preview labels what it cannot play, and plays at the chosen speed', async () => {
@@ -166,18 +200,17 @@ describe.each(['source', 'proxy'] as const)(
       // The editor plays at the chosen speed, so the live preview does too.
       expect(container.querySelector('video')!.playbackRate).toBe(2);
       const figure = screen.getByRole('figure', { name: 'Output preview' });
-      expect(figure).toHaveTextContent('live · 2×');
+      expect(figure).toHaveTextContent('Output · 480 × 854 · 15 fps · plays at 2×');
       expect(figure).toHaveTextContent(
-        'The preview plays forward. Boomerang is applied when you convert.'
+        'The preview plays forward. Boomerang is applied when you export.'
       );
       // A 4 s selection at 2× is 2 s, played there and back.
-      expect(details()).toHaveTextContent('4.0 s');
-      expect(details()).toHaveTextContent('60 frames');
+      expect(estimatedSize()).toHaveTextContent('60 frames · 4.0 s');
     });
 
     test('Keep sound says when the speed or direction drops the sound', async () => {
       await openEditor(preview);
-      fireEvent.click(screen.getByText('Quality & looping'));
+      press('MP4');
       fireEvent.click(screen.getByRole('switch', { name: 'Keep sound in MP4' }));
       expect(screen.queryByText(/^No sound/)).toBeNull();
 
@@ -203,7 +236,7 @@ describe.each(['source', 'proxy'] as const)(
       });
 
       await drop('C:/videos/two.mp4');
-      await screen.findByRole('button', { name: 'Remove two.mp4' });
+      await screen.findByRole('button', { name: 'Close two.mp4' });
       expect(screen.queryByText(/^Turned/)).toBeNull();
       expect(screen.getByRole('button', { name: 'Flip ↕' })).toHaveAttribute('aria-pressed', 'false');
       expect(screen.getByRole('button', { name: 'Forward' })).toHaveAttribute('aria-pressed', 'true');
@@ -213,21 +246,28 @@ describe.each(['source', 'proxy'] as const)(
 );
 
 test('the request carries every edit', async () => {
-  const { request } = renderAdvancedEditor({ info: sourceInfo() });
+  const { request } = renderSourceEditor({ info: sourceInfo() });
   press('Rotate right');
   press('Flip ↔');
   fireEvent.change(screen.getByRole('slider', { name: 'Speed' }), {
     target: { value: '10' },
   });
   press('Boomerang');
-  fireEvent.click(screen.getByText('Quality & looping'));
-  fireEvent.change(screen.getByRole('slider', { name: 'GIF colours' }), {
+  // WebP quality and Keep sound show with their file types.
+  expect(screen.queryByRole('slider', { name: 'WebP quality' })).toBeNull();
+  press('WebP');
+  press('MP4');
+  const quality = screen.getByRole('button', { name: 'GIF quality & looping' });
+  expect(quality).toHaveAttribute('aria-expanded', 'false');
+  expect(quality.closest('h3')).toHaveTextContent('256 colours · Smooth · Forever');
+  fireEvent.click(quality);
+  fireEvent.change(screen.getByRole('slider', { name: 'Colours' }), {
     target: { value: '64' },
   });
   fireEvent.change(screen.getByRole('combobox', { name: 'Dithering' }), {
     target: { value: 'bayer' },
   });
-  fireEvent.change(screen.getByRole('combobox', { name: 'Loop' }), {
+  fireEvent.change(screen.getByRole('combobox', { name: 'Plays' }), {
     target: { value: '2' },
   });
   fireEvent.change(screen.getByRole('slider', { name: 'WebP quality' }), {
@@ -238,9 +278,12 @@ test('the request carries every edit', async () => {
     target: { value: '24' },
   });
 
-  await convert();
+  expect(quality.closest('h3')).toHaveTextContent('64 colours · Pattern · Play twice');
+
+  await runExport();
   expect(request()).toMatchObject({
     settings: {
+      fileTypes: ['gif', 'webp', 'mp4'],
       rotation: 90,
       flipHorizontal: true,
       flipVertical: false,
@@ -257,10 +300,10 @@ test('the request carries every edit', async () => {
 });
 
 test('a source without sound offers no Keep sound', async () => {
-  const { request } = renderAdvancedEditor({ info: sourceInfo({ audioCodec: null }) });
-  fireEvent.click(screen.getByText('Quality & looping'));
+  const { request } = renderSourceEditor({ info: sourceInfo({ audioCodec: null }) });
+  press('MP4');
   expect(screen.queryByRole('switch', { name: 'Keep sound in MP4' })).toBeNull();
-  await convert();
+  await runExport();
   expect(request().keepSound).toBe(false);
 });
 

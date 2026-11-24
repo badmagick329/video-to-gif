@@ -32,7 +32,7 @@ export type SessionResult =
   | { id: string; fileType: FileType; failed: true; reason?: string };
 
 /**
- * What the Convert button asks for: mgck's single-pass job, with the source as a path and its
+ * What the Export button asks for: mgck's single-pass job, with the source as a path and its
  * probed info. Rust's `export::domain::plan::ExportRequest` mirrors it; change them together.
  * Rust works out the output size and length from `info`, the crop and the settings itself, with
  * the same functions as `advanced.ts`, and refuses captions drawn at any other size.
@@ -49,7 +49,7 @@ export type ExportRequest = {
   /** The captions as a transparent PNG at the exact output size, when there are any. */
   captions?: Uint8Array;
   /**
-   * The user saw the frame-memory warning and chose Convert anyway. Without it Rust refuses a
+   * The user saw the frame-memory warning and chose Export anyway. Without it Rust refuses a
    * run whose held frames exceed free memory.
    */
   acceptPaging?: boolean;

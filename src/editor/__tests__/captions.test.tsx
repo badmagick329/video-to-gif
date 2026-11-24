@@ -10,7 +10,7 @@ import {
   drawCaptions,
   fitCaptionPixels,
 } from '../lib/captions';
-import { renderAdvancedEditor } from './harness';
+import { renderSourceEditor } from './harness';
 import {
   clipBackend,
   drop,
@@ -18,6 +18,7 @@ import {
   renderWithListeners,
   resetTauri,
   sourceInfo,
+  ffmpegFound,
 } from './tauri';
 
 vi.mock('@tauri-apps/api/core', async () => (await import('./tauri')).core);
@@ -251,18 +252,18 @@ describe('Advanced mode captions', () => {
   /** Opens a 1280 × 720 clip in the editor with a decoded frame. */
   async function openEditor() {
     clipBackend(sourceInfo());
-    await renderWithListeners(<Editor />);
+    await renderWithListeners(<Editor ffmpeg={ffmpegFound} />);
     await openClip('C:/videos/one.mp4', { width: 1280, height: 720 });
   }
   const type = (name: 'Top text' | 'Bottom text', value: string) =>
     fireEvent.change(screen.getByRole('textbox', { name }), {
       target: { value },
     });
-  const convert = () =>
+  const runExport = () =>
     act(async () =>
-      fireEvent.click(screen.getByRole('button', { name: /^Convert to/ }))
+      fireEvent.click(screen.getByRole('button', { name: /^Export / }))
     );
-  const renderEditor = () => renderAdvancedEditor({ info: sourceInfo() });
+  const renderEditor = () => renderSourceEditor({ info: sourceInfo() });
 
   test('the preview draws both captions and follows the text size', async () => {
     await openEditor();
@@ -274,15 +275,15 @@ describe('Advanced mode captions', () => {
       ['TOP', 'top'],
       ['안녕', 'bottom'],
     ]);
-    // 12% of the 270 px side is 32 output pixels, drawn at the 300 px
-    // preview's 0.625 scale.
-    expect(fontPixels(previewStrokes()[0]!.font)).toBe(20);
+    // 12% of the 270 px side is 32 output pixels, drawn at the 474 px
+    // preview's 474 / 480 scale (the side-by-side half of jsdom's stage).
+    expect(fontPixels(previewStrokes()[0]!.font)).toBeCloseTo(32 * (474 / 480));
 
     fireEvent.change(screen.getByRole('slider', { name: 'Text size' }), {
       target: { value: '24' },
     });
     expect(screen.getByText('24%')).toBeInTheDocument();
-    expect(fontPixels(previewStrokes()[0]!.font)).toBe(65 * 0.625);
+    expect(fontPixels(previewStrokes()[0]!.font)).toBeCloseTo(65 * (474 / 480));
   });
 
   test('the preview waits for the caption font before drawing captions', async () => {
@@ -308,11 +309,11 @@ describe('Advanced mode captions', () => {
     expect(previewStrokes().map(({ text }) => text)).toEqual(['TOP']);
   });
 
-  test('converting sends a caption image at the exact output size', async () => {
+  test('exporting sends a caption image at the exact output size', async () => {
     const { request } = renderEditor();
     type('Bottom text', 'BOTTOM');
     fireEvent.click(screen.getByRole('button', { name: 'Rotate right' }));
-    await convert();
+    await runExport();
     const job = request();
     expect(String.fromCharCode(...job.captions!)).toBe('png 480x854');
     expect(job.settings).toMatchObject({ bottomText: 'BOTTOM', rotation: 90 });
@@ -321,7 +322,7 @@ describe('Advanced mode captions', () => {
   test('without captions no image is sent', async () => {
     const { request } = renderEditor();
     type('Top text', '   ');
-    await convert();
+    await runExport();
     expect(request().captions).toBeUndefined();
   });
 
@@ -332,7 +333,7 @@ describe('Advanced mode captions', () => {
       target: { value: '20' },
     });
     await drop('C:/videos/two.mp4');
-    await screen.findByRole('button', { name: 'Remove two.mp4' });
+    await screen.findByRole('button', { name: 'Close two.mp4' });
     expect(screen.getByRole('textbox', { name: 'Top text' })).toHaveValue('');
     expect(screen.getByText('20%')).toBeInTheDocument();
   });

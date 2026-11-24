@@ -187,4 +187,20 @@ export function mock2dCanvas(drawImage = vi.fn()) {
   return drawImage;
 }
 
-export const outputDetails = () => screen.getByLabelText('Output details');
+/** The Size section's readout of the exact output size. */
+export const outputSize = () => screen.getByLabelText('Output size');
+
+/** The export footer's estimate: the output's frames and length, and each ticked file type's size. */
+export const estimatedSize = () =>
+  screen.getByRole('group', { name: 'Estimated size' });
+
+/** The export footer's Export button, whatever formats its label lists. */
+export const exportButton = () =>
+  screen.getByRole('button', { name: /^Export( |$)/ });
+
+/** The ffmpeg the startup check found, as the status bar shows it. */
+export const ffmpegFound = {
+  status: 'found',
+  path: 'C:\ffmpeg\bin\ffmpeg.exe',
+  version: '9.0.1',
+} as const;

@@ -140,7 +140,7 @@ function OutputRow({
       <div className='flex gap-2'>
         <button
           type='button'
-          className='rounded-md bg-accent px-3 py-1.5 text-sm font-semibold hover:bg-accent/80'
+          className='rounded-md bg-accent px-3 py-1.5 text-sm font-semibold text-accent-fg hover:bg-accent-hover'
           aria-label={`Open ${result.name}`}
           onClick={act(openOutput)}
         >

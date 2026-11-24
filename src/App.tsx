@@ -6,7 +6,7 @@ import SetupMessage from './SetupMessage';
 
 type Startup =
   | { stage: 'checking' }
-  | { stage: 'ready' }
+  | { stage: 'ready'; tools: FfmpegTools }
   | { stage: 'setup'; tools: FfmpegTools }
   | { stage: 'failed'; message: string };
 
@@ -20,7 +20,7 @@ export default function App() {
         if (cancelled) return;
         const ready =
           tools.ffmpeg.status === 'found' && tools.ffprobe.status === 'found';
-        setStartup(ready ? { stage: 'ready' } : { stage: 'setup', tools });
+        setStartup({ stage: ready ? 'ready' : 'setup', tools });
       },
       (error: unknown) => {
         if (!cancelled) setStartup({ stage: 'failed', message: String(error) });
@@ -43,6 +43,6 @@ export default function App() {
         </main>
       );
     case 'ready':
-      return <Editor />;
+      return <Editor ffmpeg={startup.tools.ffmpeg} />;
   }
 }

@@ -9,7 +9,8 @@ export type ClipShortcut =
   | 'setEnd'
   | 'jumpToStart'
   | 'jumpToEnd'
-  | 'convert'
+  | 'export'
+  | 'showShortcuts'
   | 'openFile';
 
 /** Input types that take no typed text, so plain keys stay shortcuts on them. */
@@ -75,7 +76,7 @@ export function clipShortcutFor(event: KeyboardEvent): ClipShortcut | null {
   if (event.repeat && !repeatable) return null;
   if (event.ctrlKey || event.metaKey) {
     if (event.shiftKey) return null;
-    if (event.key === 'Enter') return 'convert';
+    if (event.key === 'Enter') return 'export';
     if (event.key === 'o' || event.key === 'O') return 'openFile';
     return null;
   }
@@ -105,6 +106,9 @@ export function clipShortcutFor(event: KeyboardEvent): ClipShortcut | null {
       return 'jumpToStart';
     case 'End':
       return 'jumpToEnd';
+    // Shift and / on most layouts; the key's character is what counts.
+    case '?':
+      return 'showShortcuts';
     default:
       return null;
   }

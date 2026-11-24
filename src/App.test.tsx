@@ -26,7 +26,8 @@ function reportTools(tools: FfmpegTools) {
 }
 
 afterEach(() => {
-  vi.mocked(invoke).mockReset();
+  // Cleared, not reset: the editor's effects can still call invoke while the test unmounts.
+  vi.mocked(invoke).mockClear();
 });
 
 test('shows the app once ffmpeg and ffprobe are both found', async () => {

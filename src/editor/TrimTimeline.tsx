@@ -168,12 +168,12 @@ export default function TrimTimeline({
     'absolute -bottom-px -top-px z-20 grid w-3.5 place-items-center bg-accent outline-none before:absolute before:-inset-x-2 before:inset-y-0 after:h-[18px] after:w-0.5 after:rounded-sm after:bg-black/50 focus-visible:ring-2 focus-visible:ring-fg';
 
   return (
-    <div className='px-3.5 pt-5'>
+    <div className='px-4 pt-5'>
       <div
         ref={strip}
         role='group'
         aria-label='Trim timeline'
-        className={`relative h-16 touch-none select-none rounded-[10px] border border-fg/15 bg-fg/10 ${disabled ? 'cursor-not-allowed' : 'cursor-pointer'}`}
+        className={`relative h-[72px] touch-none select-none rounded-md border border-line-subtle bg-black ${disabled ? 'cursor-not-allowed' : 'cursor-pointer'}`}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={endDrag}
@@ -184,7 +184,7 @@ export default function TrimTimeline({
           <div
             aria-hidden
             data-testid='timeline-thumbnails'
-            className='pointer-events-none absolute inset-0 flex overflow-hidden rounded-[9px]'
+            className='pointer-events-none absolute inset-0 flex overflow-hidden rounded-[5px]'
           >
             {Array.from({ length: timelineThumbnailCount }, (_, index) => (
               <div
@@ -200,11 +200,11 @@ export default function TrimTimeline({
           </div>
         )}
         <div
-          className='pointer-events-none absolute inset-y-0 left-0 rounded-l-[9px] bg-black/70'
+          className='pointer-events-none absolute inset-y-0 left-0 rounded-l-[5px] bg-[rgba(8,8,10,.62)]'
           style={{ width: percent(start) }}
         />
         <div
-          className='pointer-events-none absolute inset-y-0 right-0 rounded-r-[9px] bg-black/70'
+          className='pointer-events-none absolute inset-y-0 right-0 rounded-r-[5px] bg-[rgba(8,8,10,.62)]'
           style={{ width: percent(total - end) }}
         />
         <div

@@ -64,6 +64,9 @@ function Harness({
         source={source}
         trim={trim}
         onCropChange={vi.fn()}
+        mode='source'
+        onModeChange={vi.fn()}
+        output={() => null}
         disabled={disabled}
         onChange={setTrim}
         onUnplayable={onUnplayable}
@@ -225,7 +228,7 @@ test('the playhead seeks on click or drag and pauses playback while scrubbing', 
 test('loop selection is on by default and keeps playback inside the selection', () => {
   const { container } = render(<Harness initialTrim={{ start: 2, end: 5 }} />);
   const video = player(container);
-  expect(screen.getByLabelText('Loop selection')).toBeChecked();
+  expect(screen.getByLabelText('Loop selection')).toHaveAttribute('aria-pressed', 'true');
   fireEvent.click(screen.getByRole('button', { name: 'Play' }));
   expect(video.currentTime).toBe(2);
   expect(video.play).toHaveBeenCalled();
@@ -246,7 +249,7 @@ test('transport steps frames, shows the time and plays sound only when asked', (
   const { container } = render(<Harness />);
   const video = player(container);
   expect(video.muted).toBe(true);
-  expect(screen.getByLabelText('Sound')).not.toBeChecked();
+  expect(screen.getByLabelText('Sound')).toHaveAttribute('aria-pressed', 'false');
   video.currentTime = 1;
   fireEvent.click(screen.getByLabelText('Next frame'));
   expect(video.pause).toHaveBeenCalled();

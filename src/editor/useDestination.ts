@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 
 import { rememberDestination, savedDestination } from '../ipc/export';
 
-/** Where Convert puts its outputs, and why. */
+/** Where Export puts its outputs, and why. */
 export type Destination = {
   folder: string;
   /** `source`: beside the video, the default; `chosen`: picked with Save to. */

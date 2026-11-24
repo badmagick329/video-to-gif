@@ -10,6 +10,7 @@ import {
   drop,
   resetTauri,
   sourceInfo,
+  ffmpegFound,
 } from './tauri';
 
 vi.mock('@tauri-apps/api/core', async () => (await import('./tauri')).core);
@@ -46,7 +47,7 @@ afterEach(() => {
 /** Opens a 60-second clip by dropping it and waits until it can be edited. */
 async function loadClip(): Promise<[HTMLVideoElement]> {
   clipBackend(sourceInfo({ duration: 60 }));
-  const { container } = render(<Editor />);
+  const { container } = render(<Editor ffmpeg={ffmpegFound} />);
   await act(async () => {});
   await drop('C:/videos/clip.mp4');
   await waitFor(() =>
@@ -54,7 +55,7 @@ async function loadClip(): Promise<[HTMLVideoElement]> {
   );
   return [container.querySelector('video')!];
 }
-/** Whether Convert reached Rust's run_export. */
+/** Whether Export reached Rust's run_export. */
 const exported = () => core.invoke.mock.calls.some(([command]) => command === 'run_export');
 
 const press = (
@@ -141,9 +142,9 @@ test('nothing fires while typing in a field, and focused sliders keep their keys
 
 test('Space activates a focused button but plays from a focused crop handle', async () => {
   const [video] = await loadClip();
-  const loop = screen.getByRole('switch', { name: 'Loop selection' });
+  const loop = screen.getByRole('button', { name: 'Loop selection' });
   act(() => loop.focus());
-  // Not cancelled, so the browser goes on to toggle the switch itself.
+  // Not cancelled, so the browser goes on to press the button itself.
   expect(press(' ', {}, loop)).toBe(true);
   expect(played).toEqual([]);
 
@@ -158,7 +159,8 @@ test('Space activates a focused button but plays from a focused crop handle', as
 
 test('keys pressed outside the editor leave the clip alone', async () => {
   const [video] = await loadClip();
-  const preset = screen.getByRole('button', { name: /Drop a video/ });
+  // The toolbar is outside the editor's main area.
+  const preset = screen.getByRole('button', { name: 'Open' });
   act(() => preset.focus());
   video.currentTime = 10;
   press(' ', {}, preset);
@@ -174,11 +176,21 @@ test('keys pressed outside the editor leave the clip alone', async () => {
   expect(dialog.open).toHaveBeenCalledTimes(1);
 });
 
-test('the hint row lists the shortcuts under the timeline', async () => {
+test('? opens the shortcuts overlay, and Escape closes it', async () => {
   await loadClip();
-  const hints = screen.getByRole('list', { name: 'Keyboard shortcuts' });
-  expect(hints).toHaveTextContent('Space play');
-  expect(hints).toHaveTextContent('I/O start/end');
-  expect(hints).toHaveTextContent('Ctrl+Enter convert');
-  expect(hints).toHaveTextContent('Ctrl+O open');
+  expect(screen.queryByRole('dialog')).toBeNull();
+  press('?', { shiftKey: true });
+  const overlay = screen.getByRole('dialog', { name: 'Keyboard shortcuts' });
+  expect(overlay).toHaveTextContent('SpacePlay or pause');
+  expect(overlay).toHaveTextContent('I/OSet the selection start or end at the playhead');
+  expect(overlay).toHaveTextContent('Ctrl+EnterExport');
+  expect(overlay).toHaveTextContent('Ctrl+OOpen a video');
+  press('Escape');
+  expect(screen.queryByRole('dialog')).toBeNull();
+
+  // The status bar's button opens it too.
+  fireEvent.click(screen.getByRole('button', { name: /^Shortcuts/ }));
+  expect(screen.getByRole('dialog', { name: 'Keyboard shortcuts' })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+  expect(screen.queryByRole('dialog')).toBeNull();
 });

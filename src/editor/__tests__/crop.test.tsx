@@ -1,7 +1,7 @@
 // Copied from mgck's __tests__/discordgifs-crop.test.tsx.
 import { fireEvent, render, screen } from '@testing-library/react';
 import { useState } from 'react';
-import VideoCropper from '../VideoCropper';
+import VideoCropper, { CropControls } from '../VideoCropper';
 import { ClipCrop } from '../lib/types';
 import {
   CropHandle,
@@ -145,17 +145,32 @@ test('free resizing moves only the dragged sides and clamps at frame edges', () 
   expect(smallest).toEqual({ ...crop, width: 0.05, height: 0.05 });
 });
 
+/** The viewer's crop controls over its cropper, sharing the chosen ratio as the viewer does. */
 function Harness({ disabled = false }: { disabled?: boolean }) {
   const [crop, setCrop] = useState<ClipCrop>();
+  const [ratio, setRatio] = useState<number | null>(null);
+  const dimensions = { width: 640, height: 360 };
   return (
-    <VideoCropper
-      dimensions={{ width: 640, height: 360 }}
-      crop={crop}
-      disabled={disabled}
-      onChange={setCrop}
-    >
-      <video />
-    </VideoCropper>
+    <>
+      <CropControls
+        dimensions={dimensions}
+        crop={crop}
+        ratio={ratio}
+        disabled={disabled}
+        sideways={false}
+        onRatioChange={setRatio}
+        onChange={setCrop}
+      />
+      <VideoCropper
+        dimensions={dimensions}
+        crop={crop}
+        ratio={ratio}
+        disabled={disabled}
+        onChange={setCrop}
+      >
+        <video />
+      </VideoCropper>
+    </>
   );
 }
 
@@ -164,9 +179,6 @@ const ratioButton = (label: string) =>
 
 test('the crop box is on the frame from the start, with no edit mode', () => {
   render(<Harness />);
-  expect(
-    screen.getByText('Full frame. Drag a corner to crop.')
-  ).toBeInTheDocument();
   expect(screen.getByText('640 × 360')).toBeInTheDocument();
   expect(screen.getByLabelText('Move crop')).toBeEnabled();
   for (const corner of ['top left', 'top right', 'bottom left', 'bottom right'])
@@ -183,58 +195,55 @@ test('aspect buttons fit their ratio inside the current box and lock resizing', 
   fireEvent.click(ratioButton('1:1'));
   expect(ratioButton('1:1')).toHaveAttribute('aria-pressed', 'true');
   expect(ratioButton('Free')).toHaveAttribute('aria-pressed', 'false');
-  expect(screen.getByText('Crop 360 × 360 px')).toBeInTheDocument();
   expect(screen.getByText('360 × 360')).toBeInTheDocument();
 
   fireEvent.keyDown(screen.getByLabelText('Resize crop bottom right'), {
     key: 'ArrowLeft',
     shiftKey: true,
   });
-  expect(screen.getByText('Crop 328 × 328 px')).toBeInTheDocument();
+  expect(screen.getByText('328 × 328')).toBeInTheDocument();
   fireEvent.keyDown(screen.getByLabelText('Resize crop right'), {
     key: 'ArrowRight',
   });
-  expect(screen.getByText('Crop 334 × 334 px')).toBeInTheDocument();
+  expect(screen.getByText('334 × 334')).toBeInTheDocument();
 
   // A ratio fits inside the current box rather than the whole frame.
   fireEvent.click(ratioButton('4:5'));
-  expect(screen.getByText('Crop 268 × 334 px')).toBeInTheDocument();
+  expect(screen.getByText('268 × 334')).toBeInTheDocument();
   fireEvent.click(ratioButton('16:9'));
-  expect(screen.getByText('Crop 268 × 150 px')).toBeInTheDocument();
+  expect(screen.getByText('268 × 150')).toBeInTheDocument();
 
   // Free keeps the box and unlocks single-axis resizing.
   fireEvent.click(ratioButton('Free'));
-  expect(screen.getByText('Crop 268 × 150 px')).toBeInTheDocument();
+  expect(screen.getByText('268 × 150')).toBeInTheDocument();
   fireEvent.keyDown(screen.getByLabelText('Resize crop bottom right'), {
     key: 'ArrowDown',
     shiftKey: true,
   });
-  expect(screen.getByText('Crop 268 × 168 px')).toBeInTheDocument();
+  expect(screen.getByText('268 × 168')).toBeInTheDocument();
 });
 
 test('reset returns to the full frame, or the largest box of a locked ratio', () => {
   render(<Harness />);
   fireEvent.click(ratioButton('9:16'));
-  expect(screen.getByText('Crop 203 × 360 px')).toBeInTheDocument();
+  expect(screen.getByText('203 × 360')).toBeInTheDocument();
   fireEvent.keyDown(screen.getByLabelText('Resize crop top left'), {
     key: 'ArrowRight',
     shiftKey: true,
   });
   fireEvent.keyDown(screen.getByLabelText('Move crop'), { key: 'ArrowLeft' });
-  expect(screen.queryByText('Crop 203 × 360 px')).not.toBeInTheDocument();
+  expect(screen.queryByText('203 × 360')).not.toBeInTheDocument();
   fireEvent.click(ratioButton('Reset crop'));
-  expect(screen.getByText('Crop 203 × 360 px')).toBeInTheDocument();
+  expect(screen.getByText('203 × 360')).toBeInTheDocument();
   expect(ratioButton('9:16')).toHaveAttribute('aria-pressed', 'true');
 
   fireEvent.click(ratioButton('Free'));
   fireEvent.click(ratioButton('Reset crop'));
-  expect(
-    screen.getByText('Full frame. Drag a corner to crop.')
-  ).toBeInTheDocument();
+  expect(screen.getByText('640 × 360')).toBeInTheDocument();
   expect(ratioButton('Reset crop')).toBeDisabled();
 });
 
-test('crop controls lock during conversion', () => {
+test('crop controls lock during an export', () => {
   const { rerender } = render(<Harness />);
   fireEvent.click(ratioButton('1:1'));
   rerender(<Harness disabled />);

@@ -67,36 +67,119 @@ const handleMark: Record<CropHandle, string> = {
 const corners = new Set<CropHandle>(['nw', 'ne', 'sw', 'se']);
 
 const chip =
-  'h-8 rounded-md px-2.5 text-sm text-fg/80 hover:bg-fg/10 hover:text-fg aria-pressed:bg-accent aria-pressed:font-semibold aria-pressed:text-fg disabled:cursor-not-allowed disabled:opacity-50';
+  'h-6 rounded-[5px] px-2 text-sm text-[#a4a8b1] hover:text-fg aria-pressed:bg-accent aria-pressed:font-semibold aria-pressed:text-accent-fg disabled:cursor-not-allowed disabled:opacity-50';
+
+/** The source's displayed size, which export crops; never the player's, as a proxy is smaller. */
+type Dimensions = { width: number; height: number };
+
+/** The crop's size in output pixels: a quarter turn swaps the source's sides. */
+export function cropSize(
+  crop: ClipCrop | undefined,
+  dimensions: Dimensions,
+  sideways: boolean
+): Dimensions {
+  const pixels = cropPixels(crop ?? fullFrame, dimensions);
+  return sideways ? { width: pixels.height, height: pixels.width } : pixels;
+}
+
+/**
+ * The crop's aspect chips and Reset, in the viewer's header. The chosen ratio is held by the
+ * viewer, since the box on the stage keeps to it while dragged.
+ */
+export function CropControls({
+  dimensions,
+  crop,
+  ratio,
+  disabled,
+  sideways,
+  onRatioChange,
+  onChange,
+}: {
+  dimensions: Dimensions;
+  crop?: ClipCrop;
+  /** Output width over height, or null for a free box. */
+  ratio: number | null;
+  disabled: boolean;
+  sideways: boolean;
+  onRatioChange: (ratio: number | null) => void;
+  onChange: (crop: ClipCrop | undefined) => void;
+}) {
+  const selection = crop ?? fullFrame;
+  const aspect = dimensions.width / dimensions.height;
+  const lockedRatio = ratio === null ? null : sourceRatio(ratio, sideways);
+  const commit = (next: ClipCrop) =>
+    onChange(isFullFrame(next, dimensions) ? undefined : next);
+  return (
+    <div
+      role='group'
+      aria-label='Crop'
+      className='flex items-center gap-0.5 text-sm text-muted'
+    >
+      <span className='mr-1'>Crop</span>
+      {ratioChoices.map((choice) => (
+        <button
+          key={choice.label}
+          type='button'
+          className={chip}
+          disabled={disabled}
+          aria-pressed={ratio === choice.ratio}
+          onClick={() => {
+            onRatioChange(choice.ratio);
+            if (choice.ratio !== null)
+              commit(
+                fitRatio(selection, sourceRatio(choice.ratio, sideways), aspect)
+              );
+          }}
+        >
+          {choice.label}
+        </button>
+      ))}
+      <button
+        type='button'
+        className='h-6 rounded-[5px] px-2 text-sm text-dim hover:text-fg disabled:cursor-not-allowed disabled:opacity-50'
+        aria-label='Reset crop'
+        disabled={disabled || !crop}
+        onClick={() =>
+          commit(
+            lockedRatio === null
+              ? fullFrame
+              : fitRatio(fullFrame, lockedRatio, aspect)
+          )
+        }
+      >
+        Reset
+      </button>
+    </div>
+  );
+}
 
 /** An overlay edits source coordinates without decoding or encoding extra frames. */
 export default function VideoCropper({
   children,
   dimensions,
   crop,
+  ratio,
   disabled,
   onChange,
   maxHeight = 256,
   sideways = false,
 }: {
   children: ReactNode;
-  /**
-   * The source's displayed size, which export crops; never the player's, as
-   * a proxy is smaller. Readouts and the full-frame check use these pixels.
-   */
-  dimensions: { width: number; height: number } | null;
+  /** Readouts and the full-frame check use these pixels. */
+  dimensions: Dimensions | null;
   crop?: ClipCrop;
+  /** The ratio chosen in `CropControls`, output width over height; null is free. */
+  ratio: number | null;
   disabled: boolean;
   onChange: (crop: ClipCrop | undefined) => void;
   /** Tallest the video may draw, in CSS pixels; it matches the video's own cap. */
   maxHeight?: number;
   /**
-   * Advanced mode turned the output a quarter: ratios and readouts are in
-   * output pixels, so both swap while the box stays on the unturned video.
+   * The output is turned a quarter: ratios and readouts are in output pixels, so both swap while
+   * the box stays on the unturned video.
    */
   sideways?: boolean;
 }) {
-  const [ratio, setRatio] = useState<number | null>(null);
   const [dragging, setDragging] = useState(false);
   const stage = useRef<HTMLDivElement>(null);
   const drag = useRef<{
@@ -175,65 +258,13 @@ export default function VideoCropper({
     const step = event.shiftKey ? 0.05 : 0.01;
     update(handle, selection, direction[0] * step, direction[1] * step);
   };
-  const pixels = dimensions && cropPixels(selection, dimensions);
-  const size =
-    pixels && sideways
-      ? { width: pixels.height, height: pixels.width }
-      : pixels;
+  const size = dimensions && cropSize(selection, dimensions, sideways);
 
   return (
-    <div className='flex min-w-0 flex-col gap-2'>
-      {dimensions && size && (
-        <>
-          <div className='flex flex-wrap items-center gap-1'>
-            <span className='mr-1 text-sm font-semibold'>Crop</span>
-            {ratioChoices.map((choice) => (
-              <button
-                key={choice.label}
-                type='button'
-                className={chip}
-                disabled={disabled}
-                aria-pressed={ratio === choice.ratio}
-                onClick={() => {
-                  setRatio(choice.ratio);
-                  if (choice.ratio !== null)
-                    commit(
-                      fitRatio(
-                        selection,
-                        sourceRatio(choice.ratio, sideways),
-                        aspect
-                      )
-                    );
-                }}
-              >
-                {choice.label}
-              </button>
-            ))}
-            <button
-              type='button'
-              className='h-8 rounded-md border border-fg/25 px-2.5 text-sm hover:bg-fg/10 disabled:cursor-not-allowed disabled:opacity-50'
-              disabled={disabled || !crop}
-              onClick={() =>
-                commit(
-                  lockedRatio === null
-                    ? fullFrame
-                    : fitRatio(fullFrame, lockedRatio, aspect)
-                )
-              }
-            >
-              Reset crop
-            </button>
-          </div>
-          <p className='text-sm text-fg/70'>
-            {crop
-              ? `Crop ${size.width} × ${size.height} px`
-              : 'Full frame. Drag a corner to crop.'}
-          </p>
-        </>
-      )}
+    <div className='flex min-w-0 flex-col'>
       <div
         ref={stage}
-        className='relative mx-auto w-full overflow-hidden rounded-md bg-black'
+        className='relative mx-auto w-full overflow-hidden bg-black'
         style={
           dimensions
             ? { aspectRatio: aspect, maxWidth: maxHeight * aspect }
@@ -320,7 +351,7 @@ export default function VideoCropper({
                   )}
                 </button>
               ))}
-              <span className='pointer-events-none absolute left-3.5 top-3.5 whitespace-nowrap rounded bg-black/65 px-1.5 text-xs leading-5 text-white'>
+              <span className='pointer-events-none absolute left-3.5 top-3.5 whitespace-nowrap rounded bg-black/70 px-1.5 font-mono text-xs leading-5 text-white'>
                 {size.width} × {size.height}
               </span>
             </div>

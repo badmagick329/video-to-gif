@@ -3,7 +3,7 @@
 import { act, fireEvent, screen } from '@testing-library/react';
 
 import Editor from '../Editor';
-import { renderAdvancedEditor } from './harness';
+import { renderSourceEditor } from './harness';
 import type { SourceInfo } from '../../ipc/probe';
 import {
   backend,
@@ -13,13 +13,16 @@ import {
   drop,
   mock2dCanvas,
   openClip,
-  outputDetails,
+  estimatedSize,
+  exportButton,
+  outputSize,
   progress,
   proxyPath,
   renderWithListeners,
   resetTauri,
   sourceInfo,
   tauri,
+  ffmpegFound,
 } from './tauri';
 
 vi.mock('@tauri-apps/api/core', async () => (await import('./tauri')).core);
@@ -48,7 +51,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-test('opens a file chosen from the dropzone and plays the source itself', async () => {
+test('opens a file chosen with Open video and plays the source itself', async () => {
   const probe = deferred<SourceInfo>();
   backend({
     probe_source: () => probe.promise,
@@ -56,9 +59,9 @@ test('opens a file chosen from the dropzone and plays the source itself', async 
     make_thumbnails: () => new Promise(() => {}),
   });
   dialog.open.mockResolvedValue('C:\\videos\\clip.mp4');
-  await renderWithListeners(<Editor />);
+  await renderWithListeners(<Editor ffmpeg={ffmpegFound} />);
 
-  fireEvent.click(screen.getByRole('button', { name: /Drop a video or GIF here/ }));
+  fireEvent.click(screen.getByRole('button', { name: /^Open video/ }));
   expect(await screen.findByText('Opening clip.mp4…')).toBeInTheDocument();
 
   await act(async () => probe.resolve(info));
@@ -66,7 +69,7 @@ test('opens a file chosen from the dropzone and plays the source itself', async 
     'src',
     'asset://C:\\videos\\clip.mp4'
   );
-  expect(screen.getByRole('button', { name: 'Remove clip.mp4' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Close clip.mp4' })).toBeInTheDocument();
   expect(core.invoke).toHaveBeenCalledWith('probe_source', { path: 'C:\\videos\\clip.mp4' });
   expect(core.invoke).toHaveBeenCalledWith('open_source', {
     path: 'C:\\videos\\clip.mp4',
@@ -77,7 +80,7 @@ test('opens a file chosen from the dropzone and plays the source itself', async 
 
 test('Ctrl+O opens the file dialog', async () => {
   dialog.open.mockResolvedValue(null);
-  await renderWithListeners(<Editor />);
+  await renderWithListeners(<Editor ffmpeg={ffmpegFound} />);
   fireEvent.keyDown(document.body, { key: 'o', ctrlKey: true });
   expect(dialog.open).toHaveBeenCalledTimes(1);
 });
@@ -92,7 +95,7 @@ test('shows why a dropped file cannot be opened, in plain words', async () => {
       };
     },
   });
-  await renderWithListeners(<Editor />);
+  await renderWithListeners(<Editor ffmpeg={ffmpegFound} />);
 
   await drop('C:\\videos\\notes.mp4');
 
@@ -110,14 +113,14 @@ test('builds a proxy with progress when WebView2 cannot play the source', async 
     make_proxy: () => proxy.promise,
     make_thumbnails: () => new Promise(() => {}),
   });
-  await renderWithListeners(<Editor />);
+  await renderWithListeners(<Editor ffmpeg={ffmpegFound} />);
 
   await drop('C:\\videos\\phone.mkv');
   expect(
     await screen.findByText('Making a preview copy of phone.mkv: 0%')
   ).toBeInTheDocument();
   // The settings work from the probe while the proxy builds.
-  expect(outputDetails()).toHaveTextContent('480 × 270');
+  expect(outputSize()).toHaveTextContent('480 × 270');
 
   await progress('C:\\videos\\phone.mkv', 0.42);
   expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '42');
@@ -127,7 +130,7 @@ test('builds a proxy with progress when WebView2 cannot play the source', async 
 
   await act(async () => proxy.resolve(proxyPath));
   expect(document.querySelector('video')).toHaveAttribute('src', `asset://${proxyPath}`);
-  expect(screen.getByText('(preview copy)')).toBeInTheDocument();
+  expect(screen.getByText('Playing a preview copy')).toBeInTheDocument();
   expect(core.invoke).toHaveBeenCalledWith('make_proxy', { path: 'C:\\videos\\phone.mkv' });
 });
 
@@ -138,7 +141,7 @@ test('falls back to a proxy when the player cannot decode the source, keeping th
     make_proxy: () => new Promise(() => {}),
     make_thumbnails: () => new Promise(() => {}),
   });
-  await renderWithListeners(<Editor />);
+  await renderWithListeners(<Editor ffmpeg={ffmpegFound} />);
   await drop('C:\\videos\\high10.mp4');
   const end = screen.getByRole('textbox', { name: 'End' });
   fireEvent.change(end, { target: { value: '0:05' } });
@@ -151,7 +154,7 @@ test('falls back to a proxy when the player cannot decode the source, keeping th
 
   expect(core.invoke).toHaveBeenCalledWith('make_proxy', { path: 'C:\\videos\\high10.mp4' });
   expect(screen.getByText(/Making a preview copy of high10\.mp4/)).toBeInTheDocument();
-  expect(outputDetails()).toHaveTextContent('5.0 s');
+  expect(estimatedSize()).toHaveTextContent('75 frames · 5.0 s');
 });
 
 test('opening another source while a proxy builds shows only the new one', async () => {
@@ -164,7 +167,7 @@ test('opening another source while a proxy builds shows only the new one', async
     make_proxy: () => firstProxy.promise,
     make_thumbnails: () => new Promise(() => {}),
   });
-  await renderWithListeners(<Editor />);
+  await renderWithListeners(<Editor ffmpeg={ffmpegFound} />);
   await drop('C:\\videos\\first.mkv');
   expect(await screen.findByRole('progressbar')).toBeInTheDocument();
 
@@ -188,7 +191,7 @@ test('says when ffmpeg fails to make the proxy', async () => {
       throw { kind: 'proxyFailed', reason: 'Conversion failed!' };
     },
   });
-  await renderWithListeners(<Editor />);
+  await renderWithListeners(<Editor ffmpeg={ffmpegFound} />);
   await drop('C:\\videos\\broken.mkv');
 
   expect(await screen.findByRole('alert')).toHaveTextContent(
@@ -210,12 +213,12 @@ test('removing the clip mid-proxy closes its source in the backend', async () =>
       proxy.reject({ kind: 'cancelled' });
     },
   });
-  await renderWithListeners(<Editor />);
+  await renderWithListeners(<Editor ffmpeg={ffmpegFound} />);
   await drop('C:\\videos\\phone.mkv');
   expect(await screen.findByRole('progressbar')).toBeInTheDocument();
 
   await act(async () => {
-    fireEvent.click(screen.getByRole('button', { name: 'Remove phone.mkv' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Close phone.mkv' }));
   });
 
   expect(closed).toEqual([{ path: 'C:\\videos\\phone.mkv' }]);
@@ -223,7 +226,7 @@ test('removing the clip mid-proxy closes its source in the backend', async () =>
   expect(screen.queryByRole('alert')).toBeNull();
   expect(document.querySelector('video')).toBeNull();
   expect(
-    screen.getByRole('button', { name: /Drop a video or GIF here/ })
+    screen.getByRole('button', { name: /^Open video/ })
   ).toBeInTheDocument();
 });
 
@@ -231,11 +234,11 @@ test('removing a clip that plays the source also closes it', async () => {
   clipBackend(info);
   const closeSource = vi.fn(async () => {});
   tauri.commands.close_source = closeSource;
-  await renderWithListeners(<Editor />);
+  await renderWithListeners(<Editor ffmpeg={ffmpegFound} />);
   await drop('C:\\videos\\clip.mp4');
 
   await act(async () => {
-    fireEvent.click(screen.getByRole('button', { name: 'Remove clip.mp4' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Close clip.mp4' }));
   });
 
   expect(closeSource).toHaveBeenCalledWith({ path: 'C:\\videos\\clip.mp4' });
@@ -250,19 +253,19 @@ describe('on a proxy, sizes are in the source’s displayed pixels', () => {
 
   async function openProxied() {
     clipBackend(uhd, 'proxy');
-    await renderWithListeners(<Editor />);
+    await renderWithListeners(<Editor ffmpeg={ffmpegFound} />);
     return openClip('C:\\videos\\uhd.mkv', { width: 1280, height: 720 });
   }
 
   test('the crop readout and output size scale to the source, not the proxy', async () => {
     await openProxied();
     expect(document.querySelector('video')).toHaveAttribute('src', `asset://${proxyPath}`);
-    expect(screen.getByText('3840 × 2160')).toBeInTheDocument();
+    expect(screen.getByText('3840 × 2160', { selector: 'span' })).toBeInTheDocument();
 
     press('1:1');
-    expect(screen.getByText('Crop 2160 × 2160 px')).toBeInTheDocument();
+    expect(screen.getByText('Source · crop 2160 × 2160')).toBeInTheDocument();
     press('Original');
-    expect(outputDetails()).toHaveTextContent('2160 × 2160');
+    expect(outputSize()).toHaveTextContent('2160 × 2160');
     // A preset narrower than the source's crop stays available, though the proxy is 720 wide.
     expect(screen.getByRole('button', { name: '640' })).toBeEnabled();
     expect(screen.getByRole('spinbutton', { name: 'Width in pixels' })).toHaveValue(2160);
@@ -271,12 +274,12 @@ describe('on a proxy, sizes are in the source’s displayed pixels', () => {
   test('a crop covering the proxy is full frame on the source too', async () => {
     await openProxied();
     press('16:9');
-    expect(screen.getByText('Full frame. Drag a corner to crop.')).toBeInTheDocument();
+    expect(screen.getByText('Source · full frame, drag a corner to crop')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Reset crop' })).toBeDisabled();
   });
 
   test('the export request carries the crop as fractions of the source, at its pixel size', async () => {
-    const { request } = renderAdvancedEditor({
+    const { request } = renderSourceEditor({
       info: uhd,
       preview: 'proxy',
       frame: { width: 1280, height: 720 },
@@ -284,9 +287,9 @@ describe('on a proxy, sizes are in the source’s displayed pixels', () => {
 
     press('9:16');
     press('Original');
-    expect(screen.getByText('Crop 1215 × 2160 px')).toBeInTheDocument();
+    expect(screen.getByText('Source · crop 1215 × 2160')).toBeInTheDocument();
     await act(async () =>
-      fireEvent.click(screen.getByRole('button', { name: /^Convert to/ }))
+      fireEvent.click(exportButton())
     );
     expect(Math.round(request().crop!.width * uhd.width)).toBe(1215);
     expect(Math.round(request().crop!.height * uhd.height)).toBe(2160);

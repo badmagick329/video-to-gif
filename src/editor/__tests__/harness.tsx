@@ -1,23 +1,27 @@
-// The advanced editor with the state the app holds for it, for tests that read the export
-// request Convert builds. Mock the Tauri modules with ./tauri first.
+// The source editor with the state the app holds for it, for tests that read the export request
+// Export builds. Mock the Tauri modules with ./tauri first.
 import { fireEvent, render } from '@testing-library/react';
 import { useState } from 'react';
 
-import AdvancedEditor from '../AdvancedEditor';
+import SourceEditor from '../SourceEditor';
 import { defaultAdvancedSettings } from '../lib/advanced';
 import type { ClipCrop, ClipTrim, ExportRequest } from '../lib/types';
+import type { MemoryEstimate } from '../../ipc/export';
 import type { SourceInfo } from '../../ipc/probe';
 import { clipBackend, proxyPath } from './tauri';
 
-export function renderAdvancedEditor({
+export function renderSourceEditor({
   info,
   preview = 'source',
   frame = { width: info.width, height: info.height },
+  memory = null,
 }: {
   info: SourceInfo;
   preview?: 'source' | 'proxy';
   /** The player's decoded frame: the proxy's size when it plays one. */
   frame?: { width: number; height: number };
+  /** The frame-memory estimate the window would pass down. */
+  memory?: MemoryEstimate | null;
 }) {
   const onExport = vi.fn(
     async (request: ExportRequest, destination: string) => {
@@ -31,7 +35,7 @@ export function renderAdvancedEditor({
     const [crop, setCrop] = useState<ClipCrop>();
     const [settings, setSettings] = useState(defaultAdvancedSettings);
     return (
-      <AdvancedEditor
+      <SourceEditor
         source={{
           id: 1,
           path,
@@ -46,10 +50,10 @@ export function renderAdvancedEditor({
         crop={crop}
         settings={settings}
         results={[]}
+        memory={memory}
         onSettingsChange={setSettings}
         onTrimChange={setTrim}
         onCropChange={setCrop}
-        onRemove={() => {}}
         onUnplayable={() => {}}
         job={null}
         saveTo={{
@@ -73,7 +77,7 @@ export function renderAdvancedEditor({
   });
   fireEvent.loadedMetadata(video);
   fireEvent.loadedData(video);
-  /** The request the latest Convert sent. */
+  /** The request the latest Export sent. */
   const request = () => onExport.mock.calls.at(-1)![0];
   return { ...view, video, onExport, request };
 }

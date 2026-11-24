@@ -4,9 +4,10 @@
 // figure, a placeholder while estimating, or the old figure greyed while updating.
 import { act, fireEvent, screen } from '@testing-library/react';
 
-import { renderAdvancedEditor } from './harness';
+import { renderSourceEditor } from './harness';
 import {
   core,
+  estimatedSize,
   estimateAnswers,
   invoked,
   mock2dCanvas,
@@ -50,7 +51,7 @@ const estimateCalls = () =>
 
 /** Opens a 1080p clip with GIF, WebP and MP4 ticked, and lets the first estimate run. */
 async function openWithAllTicked() {
-  const view = renderAdvancedEditor({
+  const view = renderSourceEditor({
     info: sourceInfo({ width: 1920, height: 1080, duration: 60 }),
   });
   tauri.commands.estimate_output_size = estimateAnswers({
@@ -58,8 +59,8 @@ async function openWithAllTicked() {
     webp: 2 * MiB,
     mp4: MiB,
   });
-  fireEvent.click(screen.getByRole('checkbox', { name: /WebP/ }));
-  fireEvent.click(screen.getByRole('checkbox', { name: /MP4/ }));
+  fireEvent.click(screen.getByRole('button', { name: 'WebP' }));
+  fireEvent.click(screen.getByRole('button', { name: 'MP4' }));
   await wait(1500);
   return view;
 }
@@ -89,7 +90,7 @@ test('dragging the width slider starts no estimate until 1.5 s after the drag en
 }, 20_000);
 
 test('a change kills the running estimate at once', async () => {
-  renderAdvancedEditor({ info: sourceInfo({ duration: 60 }) });
+  renderSourceEditor({ info: sourceInfo({ duration: 60 }) });
   // An estimate that never finishes.
   tauri.commands.estimate_output_size = () => new Promise(() => {});
   await wait(1500);
@@ -109,7 +110,8 @@ test('a change reruns only the file types it affects', async () => {
   await openWithAllTicked();
   expect(estimateCalls()[0]!.settings.fileTypes).toEqual(['gif', 'webp', 'mp4']);
 
-  fireEvent.change(screen.getByRole('slider', { name: 'GIF colours' }), {
+  fireEvent.click(screen.getByRole('button', { name: 'GIF quality & looping' }));
+  fireEvent.change(screen.getByRole('slider', { name: 'Colours' }), {
     target: { value: '64' },
   });
   await wait(1500);
@@ -132,7 +134,7 @@ test('a change reruns only the file types it affects', async () => {
 });
 
 test('estimates wait while the video plays', async () => {
-  const { video } = renderAdvancedEditor({ info: sourceInfo({ duration: 60 }) });
+  const { video } = renderSourceEditor({ info: sourceInfo({ duration: 60 }) });
   Object.defineProperty(video, 'paused', { value: false, configurable: true });
   fireEvent.play(video);
   await wait(3000);
@@ -147,7 +149,7 @@ test('estimates wait while the video plays', async () => {
 
 test('each ticked file type shows its estimate, and the old one greyed while it updates', async () => {
   await openWithAllTicked();
-  const details = screen.getByLabelText('Output details');
+  const details = estimatedSize();
   expect(details).toHaveTextContent('GIF ≈ 6.0 MiB');
   expect(details).toHaveTextContent('WebP ≈ 2.0 MiB');
   expect(details).toHaveTextContent('MP4 ≈ 1.0 MiB');
@@ -171,16 +173,16 @@ test('each ticked file type shows its estimate, and the old one greyed while it 
   // Unticking and ticking again keeps a figure whose settings have not changed, and asks Rust
   // for nothing.
   const calls = estimateCalls().length;
-  fireEvent.click(screen.getByRole('checkbox', { name: /GIF/ }));
-  fireEvent.click(screen.getByRole('checkbox', { name: /GIF/ }));
+  fireEvent.click(screen.getByRole('button', { name: 'GIF' }));
+  fireEvent.click(screen.getByRole('button', { name: 'GIF' }));
   expect(details).toHaveTextContent('GIF ≈ 3.0 MiB');
   await wait(1500);
   expect(estimateCalls()).toHaveLength(calls);
 });
 
 test('a file type with no figure yet shows a placeholder', async () => {
-  renderAdvancedEditor({ info: sourceInfo({ duration: 60 }) });
-  expect(screen.getByLabelText('Output details')).toContainElement(
+  renderSourceEditor({ info: sourceInfo({ duration: 60 }) });
+  expect(estimatedSize()).toContainElement(
     screen.getByRole('img', { name: 'Estimating' })
   );
   expect(

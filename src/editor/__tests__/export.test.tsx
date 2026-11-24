@@ -1,4 +1,4 @@
-// Convert through Rust's export: progress, cancel, failures, Made this session with Open and Show
+// Export through Rust's export: progress, cancel, failures, Made this session with Open and Show
 // in folder, the frame-memory warning and where outputs are saved. The backend's part is played by
 // ./tauri, with run_export held open so each test can emit events mid-run.
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
@@ -19,6 +19,8 @@ import {
   resetTauri,
   sourceInfo,
   tauri,
+  exportButton,
+  ffmpegFound,
 } from './tauri';
 
 vi.mock('@tauri-apps/api/core', async () => (await import('./tauri')).core);
@@ -76,35 +78,46 @@ async function openEditor(commands: Record<string, (args: Record<string, unknown
     cancel_export: async () => {},
     ...commands,
   });
-  const view = await renderWithListeners(<Editor />);
+  const view = await renderWithListeners(<Editor ffmpeg={ffmpegFound} />);
   await openClip(source, { width: 1280, height: 720 });
   return view;
 }
 
-const convertButton = () => screen.getByRole('button', { name: /^Convert to/ });
-const convert = () => act(async () => fireEvent.click(convertButton()));
-const progressBar = () => screen.getByRole('progressbar', { name: 'Conversion progress' });
-const results = () => screen.getByRole('region', { name: 'Made this session' });
-const saveTo = () => screen.getByRole('group', { name: 'Save to' });
+/** Shows an inspector tab; the other one's content leaves the accessibility tree. */
+const showTab = (name: 'Output' | 'Exports') =>
+  fireEvent.click(screen.getByRole('tab', { name: new RegExp(`^${name}`) }));
+const runExport = () => act(async () => fireEvent.click(exportButton()));
+const progressBar = () => {
+  showTab('Output');
+  return screen.getByRole('progressbar', { name: 'Export progress' });
+};
+const results = () => {
+  showTab('Exports');
+  return screen.getByRole('region', { name: 'Made this session' });
+};
+const saveTo = () => {
+  showTab('Output');
+  return screen.getByRole('group', { name: 'Save to' });
+};
 const invoked = (command: string) =>
   core.invoke.mock.calls.filter(([name]) => name === command).map(([, args]) => args);
 
-describe('Convert', () => {
+describe('Export', () => {
   test('runs the export into the video’s folder, shows each file type’s progress, and lists each output as it lands', async () => {
     await openEditor();
-    fireEvent.click(screen.getByRole('checkbox', { name: /WebP/ }));
-    fireEvent.click(screen.getByRole('checkbox', { name: /MP4/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'WebP' }));
+    fireEvent.click(screen.getByRole('button', { name: 'MP4' }));
     const run = heldExport();
-    await convert();
+    await runExport();
 
     expect(run.calls).toHaveLength(1);
     expect(run.calls[0]).toMatchObject({
       destination: 'C:\\videos',
       request: { path: source, settings: { fileTypes: ['gif', 'webp', 'mp4'] } },
     });
-    // Convert gives way to the progress bar and Cancel; settings lock.
-    expect(screen.queryByRole('button', { name: /^Convert to/ })).toBeNull();
-    expect(screen.getByRole('checkbox', { name: /WebP/ })).toBeDisabled();
+    // Export gives way to the progress bar and Cancel; settings lock.
+    expect(screen.queryByRole('button', { name: /^Export / })).toBeNull();
+    expect(screen.getByRole('button', { name: 'WebP' })).toBeDisabled();
 
     await emit('export-progress', { fileType: 'gif', progress: 0 });
     expect(progressBar()).toHaveTextContent('Making GIF (1/3), analysing colours…');
@@ -126,6 +139,7 @@ describe('Convert', () => {
     await emit('export-output', done('mp4'));
     await run.finish([done('gif'), done('webp'), done('mp4')]);
 
+    showTab('Output');
     expect(screen.getByRole('status')).toHaveTextContent(
       'Saved GIF, WebP and MP4 to C:\\videos.'
     );
@@ -137,25 +151,27 @@ describe('Convert', () => {
       'one.mp4',
     ]);
     expect(within(rows[2]!).getByLabelText('MP4 preview').tagName).toBe('VIDEO');
-    expect(convertButton()).toBeEnabled();
+    showTab('Output');
+    expect(exportButton()).toBeEnabled();
   });
 
   test('lists an output whose event never came, from what run_export resolved with', async () => {
     await openEditor();
     const run = heldExport();
-    await convert();
+    await runExport();
     await run.finish([done('gif')]);
     expect(within(results()).getByRole('listitem')).toHaveTextContent('one.gif');
   });
 
   test('Cancel stops the run; the file types it stopped leave nothing in the list', async () => {
     await openEditor();
-    fireEvent.click(screen.getByRole('checkbox', { name: /WebP/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'WebP' }));
     const run = heldExport();
-    await convert();
+    await runExport();
     await emit('export-output', done('gif'));
     await emit('export-progress', { fileType: 'webp', progress: 0.3 });
 
+    showTab('Output');
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(invoked('cancel_export')).toHaveLength(1);
     expect(screen.getByRole('button', { name: 'Cancelling…' })).toBeDisabled();
@@ -165,20 +181,21 @@ describe('Convert', () => {
     expect(screen.getByRole('status')).toHaveTextContent(
       'Cancelled; nothing unfinished was left behind. GIF saved to C:\\videos.'
     );
+    expect(screen.queryByRole('progressbar', { name: 'Export progress' })).toBeNull();
     expect(within(results()).getAllByRole('listitem')).toHaveLength(1);
-    expect(screen.queryByRole('progressbar', { name: 'Conversion progress' })).toBeNull();
+    expect(screen.getByRole('tab', { name: /^Exports/ })).toHaveTextContent('Exports1');
   });
 
   test('a failed file type says so briefly and folds ffmpeg’s error away', async () => {
     await openEditor();
-    fireEvent.click(screen.getByRole('checkbox', { name: /WebP/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'WebP' }));
     const run = heldExport();
-    await convert();
+    await runExport();
     const tail = '[libwebp_anim @ 0x1] Encoding error\nConversion failed!';
     await run.finish([done('gif'), { status: 'failed', fileType: 'webp', reason: tail }]);
 
     expect(screen.getByRole('alert')).toHaveTextContent(
-      "WebP failed; ffmpeg's error is under Made this session. GIF saved to C:\\videos."
+      "WebP failed; ffmpeg's error is in the Exports tab. GIF saved to C:\\videos."
     );
     const failed = within(results()).getAllByRole('listitem')[1]!;
     expect(failed).toHaveTextContent('WebP conversion failed');
@@ -192,19 +209,19 @@ describe('Convert', () => {
   test('a run Rust refuses to start shows why, with its reason folded away', async () => {
     await openEditor();
     const run = heldExport();
-    await convert();
+    await runExport();
     await run.reject({ kind: 'invalidRequest', reason: 'the crop lies outside the frame' });
     const alert = screen.getByRole('alert');
-    expect(alert).toHaveTextContent('These settings cannot be converted.');
+    expect(alert).toHaveTextContent('These settings cannot be exported.');
     expect(alert.querySelector('pre')).toHaveTextContent('the crop lies outside the frame');
+    expect(exportButton()).toBeEnabled();
     expect(within(results()).queryByRole('listitem')).toBeNull();
-    expect(convertButton()).toBeEnabled();
   });
 
   test('a destination deleted since it was picked is reported, not written to', async () => {
     await openEditor();
     const run = heldExport();
-    await convert();
+    await runExport();
     await run.reject({ kind: 'destinationNotFound', path: 'C:\\videos' });
     expect(screen.getByRole('alert')).toHaveTextContent(
       'There is no folder at C:\\videos any more. Pick another with Save to.'
@@ -216,9 +233,10 @@ describe('Made this session', () => {
   test('Open and Show in folder send Rust the output’s own path', async () => {
     await openEditor();
     const run = heldExport();
-    await convert();
+    await runExport();
     await run.finish([done('gif')]);
 
+    showTab('Exports');
     fireEvent.click(screen.getByRole('button', { name: 'Open one.gif' }));
     fireEvent.click(screen.getByRole('button', { name: 'Show one.gif in folder' }));
     expect(invoked('open_output')).toEqual([{ path: 'C:\\videos\\one.gif' }]);
@@ -255,7 +273,7 @@ describe('Made this session', () => {
 });
 
 describe('Frame-memory guard', () => {
-  test('warns that Windows will page, and Convert anyway sends the acceptance', async () => {
+  test('warns that Windows will page, and Export anyway sends the acceptance', async () => {
     await openEditor({
       estimate_export_memory: async () => ({
         heldBytes: 6 * gib,
@@ -265,7 +283,7 @@ describe('Frame-memory guard', () => {
       }),
       run_export: () => new Promise(() => {}),
     });
-    const anyway = await screen.findByRole('button', { name: 'Convert anyway' });
+    const anyway = await screen.findByRole('button', { name: 'Export anyway' });
     expect(screen.getByRole('alert')).toHaveTextContent(
       'Making a GIF holds about 6.0 GiB of frames in memory and 4.0 GiB is free, so Windows will page to disk and the PC may crawl. Lower the width or frame rate, or trim to 0:02.50 or less, to stay in memory.'
     );
@@ -275,7 +293,7 @@ describe('Frame-memory guard', () => {
     expect(invoked('run_export')[0]).toMatchObject({
       request: { acceptPaging: true },
     });
-    // The estimate is asked for the clip and settings Convert would send.
+    // The estimate is asked for the clip and settings Export would send.
     expect(invoked('estimate_export_memory').at(-1)).toMatchObject({
       request: { info: sourceInfo(), settings: { fileTypes: ['gif'] } },
     });
@@ -295,7 +313,7 @@ describe('Frame-memory guard', () => {
         'Making a GIF will keep about 3.0 GiB of frames in memory, more than half of the 4.0 GiB free now.'
       )
     ).toBeInTheDocument();
-    expect(convertButton()).toBeEnabled();
+    expect(exportButton()).toBeEnabled();
   });
 
   test('says nothing when the frames stream through', async () => {
@@ -311,16 +329,20 @@ describe('Save to', () => {
   // folder no longer exists (destination.rs tests that), so this is the fallback too.
   test('defaults to the video’s folder', async () => {
     await openEditor();
-    expect(saveTo()).toHaveTextContent("Save to C:\\videos (the video's folder)");
+    expect(saveTo()).toHaveTextContent('Save to C:\\videos Change…');
+    expect(within(saveTo()).getByText('C:\\videos')).toHaveAttribute(
+      'title',
+      "C:\\videos (the video's folder)"
+    );
     expect(within(saveTo()).queryByRole('button', { name: "Use the video's folder" })).toBeNull();
   });
 
   test('a folder remembered from an earlier launch is used and shown', async () => {
     await openEditor({ saved_destination: async () => 'D:\\gifs' });
     await waitFor(() => expect(saveTo()).toHaveTextContent('Save to D:\\gifs'));
-    expect(saveTo()).not.toHaveTextContent("(the video's folder)");
+    expect(within(saveTo()).getByText('D:\\gifs')).toHaveAttribute('title', 'D:\\gifs');
     const run = heldExport();
-    await convert();
+    await runExport();
     expect(run.calls[0]).toMatchObject({ destination: 'D:\\gifs' });
   });
 
@@ -328,7 +350,7 @@ describe('Save to', () => {
     await openEditor();
     dialog.open.mockResolvedValue('E:\\exports');
     await act(async () =>
-      fireEvent.click(within(saveTo()).getByRole('button', { name: 'Choose folder…' }))
+      fireEvent.click(within(saveTo()).getByRole('button', { name: 'Change…' }))
     );
     expect(dialog.open).toHaveBeenCalledWith(
       expect.objectContaining({ directory: true, defaultPath: 'C:\\videos' })
@@ -337,7 +359,7 @@ describe('Save to', () => {
     expect(saveTo()).toHaveTextContent('Save to E:\\exports');
 
     const run = heldExport();
-    await convert();
+    await runExport();
     expect(run.calls[0]).toMatchObject({ destination: 'E:\\exports' });
     await run.finish([done('gif', 'E:\\exports')]);
 
@@ -345,14 +367,14 @@ describe('Save to', () => {
       fireEvent.click(within(saveTo()).getByRole('button', { name: "Use the video's folder" }))
     );
     expect(invoked('remember_destination').at(-1)).toEqual({ folder: null });
-    expect(saveTo()).toHaveTextContent("Save to C:\\videos (the video's folder)");
+    expect(saveTo()).toHaveTextContent('Save to C:\\videos');
   });
 
   test('closing the folder picker keeps the current folder', async () => {
     await openEditor();
     dialog.open.mockResolvedValue(null);
     await act(async () =>
-      fireEvent.click(within(saveTo()).getByRole('button', { name: 'Choose folder…' }))
+      fireEvent.click(within(saveTo()).getByRole('button', { name: 'Change…' }))
     );
     expect(invoked('remember_destination')).toEqual([]);
     expect(saveTo()).toHaveTextContent('Save to C:\\videos');

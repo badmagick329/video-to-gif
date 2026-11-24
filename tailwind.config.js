@@ -56,11 +56,11 @@ export default {
         mono: ['"JetBrains Mono Variable"', 'ui-monospace', 'monospace'],
       },
       fontSize: {
-        // The board's type scale: 13 px body, 12.5 px controls, 11 px section heads.
+        // The board's type scale: 13 px body, 12.5 px controls as `text-md`, 11 px section heads.
         '2xs': ['10.5px', '16px'],
         xs: ['11px', '15px'],
         sm: ['12px', '16px'],
-        control: ['12.5px', '17px'],
+        md: ['12.5px', '17px'],
         base: ['13px', '18px'],
       },
     },
