@@ -10,7 +10,7 @@ import { Switch } from './Switch';
 import { formatClipTime } from './lib/trim';
 
 const stepButton =
-  'grid h-9 w-9 place-items-center rounded-md text-foreground-dg/70 hover:bg-foreground-dg/10 hover:text-foreground-dg';
+  'grid h-9 w-9 place-items-center rounded-md text-fg/70 hover:bg-fg/10 hover:text-fg';
 
 /** Replaces the native controls so the video surface stays free for the crop box. */
 export default function ClipTransport({
@@ -41,7 +41,7 @@ export default function ClipTransport({
       <button
         type='button'
         aria-label={playing ? 'Pause' : 'Play'}
-        className='grid h-10 w-10 place-items-center rounded-full bg-foreground-dg text-background-dg hover:bg-foreground-dg/90'
+        className='grid h-10 w-10 place-items-center rounded-full bg-fg text-canvas hover:bg-fg/90'
         onClick={onTogglePlay}
       >
         {playing ? (
@@ -66,8 +66,8 @@ export default function ClipTransport({
       >
         <IoChevronForward aria-hidden className='h-4 w-4' />
       </button>
-      <p className='font-mono text-sm tabular-nums text-foreground-dg/70'>
-        <span className='text-foreground-dg'>
+      <p className='font-mono text-sm tabular-nums text-fg/70'>
+        <span className='text-fg'>
           {formatClipTime(currentTime)}
         </span>{' '}
         / {formatClipTime(total)}
@@ -78,7 +78,7 @@ export default function ClipTransport({
             id={loopId}
             checked={loopSelection}
             onCheckedChange={onLoopSelectionChange}
-            className='data-[state=checked]:bg-primary-dg data-[state=unchecked]:bg-foreground-dg/20'
+            className='data-[state=checked]:bg-accent data-[state=unchecked]:bg-fg/20'
           />
           <label htmlFor={loopId} className='cursor-pointer'>
             Loop selection
@@ -89,7 +89,7 @@ export default function ClipTransport({
             id={soundId}
             checked={sound}
             onCheckedChange={onSoundChange}
-            className='data-[state=checked]:bg-primary-dg data-[state=unchecked]:bg-foreground-dg/20'
+            className='data-[state=checked]:bg-accent data-[state=unchecked]:bg-fg/20'
           />
           <label htmlFor={soundId} className='cursor-pointer'>
             Sound

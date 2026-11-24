@@ -67,7 +67,7 @@ const handleMark: Record<CropHandle, string> = {
 const corners = new Set<CropHandle>(['nw', 'ne', 'sw', 'se']);
 
 const chip =
-  'h-8 rounded-md px-2.5 text-sm text-foreground-dg/80 hover:bg-foreground-dg/10 hover:text-foreground-dg aria-pressed:bg-primary-dg aria-pressed:font-semibold aria-pressed:text-foreground-dg disabled:cursor-not-allowed disabled:opacity-50';
+  'h-8 rounded-md px-2.5 text-sm text-fg/80 hover:bg-fg/10 hover:text-fg aria-pressed:bg-accent aria-pressed:font-semibold aria-pressed:text-fg disabled:cursor-not-allowed disabled:opacity-50';
 
 /** An overlay edits source coordinates without decoding or encoding extra frames. */
 export default function VideoCropper({
@@ -211,7 +211,7 @@ export default function VideoCropper({
             ))}
             <button
               type='button'
-              className='h-8 rounded-md border border-foreground-dg/25 px-2.5 text-sm hover:bg-foreground-dg/10 disabled:cursor-not-allowed disabled:opacity-50'
+              className='h-8 rounded-md border border-fg/25 px-2.5 text-sm hover:bg-fg/10 disabled:cursor-not-allowed disabled:opacity-50'
               disabled={disabled || !crop}
               onClick={() =>
                 commit(
@@ -224,7 +224,7 @@ export default function VideoCropper({
               Reset crop
             </button>
           </div>
-          <p className='text-sm text-foreground-dg/70'>
+          <p className='text-sm text-fg/70'>
             {crop
               ? `Crop ${size.width} × ${size.height} px`
               : 'Full frame. Drag a corner to crop.'}
@@ -286,7 +286,7 @@ export default function VideoCropper({
                   className={clsx(
                     'group/handle pointer-events-auto absolute touch-none',
                     handle === 'move'
-                      ? 'inset-0 cursor-move focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-orange-500'
+                      ? 'inset-0 cursor-move focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent'
                       : `focus-visible:outline-none ${handlePlacement[handle]}`
                   )}
                   onPointerDown={(event) => startDrag(event, handle)}
@@ -313,7 +313,7 @@ export default function VideoCropper({
                   {handle !== 'move' && (
                     <span
                       className={clsx(
-                        'absolute rounded-sm bg-white shadow-[0_1px_4px_rgb(0_0_0/50%)] group-hover/handle:bg-primary-dg group-focus-visible/handle:bg-orange-500',
+                        'absolute rounded-sm bg-white shadow-[0_1px_4px_rgb(0_0_0/50%)] group-hover/handle:bg-accent group-focus-visible/handle:bg-accent',
                         handleMark[handle]
                       )}
                     />

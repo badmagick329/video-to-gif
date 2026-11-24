@@ -36,7 +36,7 @@ function keepInSelection(player: HTMLVideoElement, playback: Playback) {
 }
 
 const button =
-  'h-9 rounded-md border border-foreground-dg/25 px-3 text-sm hover:bg-foreground-dg/10 disabled:cursor-not-allowed disabled:opacity-50';
+  'h-9 rounded-md border border-fg/25 px-3 text-sm hover:bg-fg/10 disabled:cursor-not-allowed disabled:opacity-50';
 
 /**
  * What the trimmer needs to know about the source. It comes from the probe,
@@ -342,7 +342,7 @@ function ShortcutHints() {
   return (
     <ul
       aria-label='Keyboard shortcuts'
-      className='hidden flex-wrap gap-x-3 gap-y-1 text-xs text-foreground-dg/60 [@media(any-pointer:fine)]:flex'
+      className='hidden flex-wrap gap-x-3 gap-y-1 text-xs text-fg/60 [@media(any-pointer:fine)]:flex'
     >
       {shortcutHints.map(([keys, action]) => (
         <li key={action} className='flex items-center gap-0.5'>
@@ -352,7 +352,7 @@ function ShortcutHints() {
             ) : (
               <kbd
                 key={index}
-                className='rounded border border-b-2 border-foreground-dg/25 bg-foreground-dg/10 px-1 font-mono text-[11px] leading-4 text-foreground-dg'
+                className='rounded border border-b-2 border-fg/25 bg-fg/10 px-1 font-mono text-[11px] leading-4 text-fg'
               >
                 {key}
               </kbd>
@@ -390,7 +390,7 @@ function TimeField({
         inputMode='decimal'
         spellCheck={false}
         autoComplete='off'
-        className='h-8 w-[5.5rem] rounded-md border border-foreground-dg/25 bg-background-dg px-2 font-mono text-[13px] focus:border-primary-dg focus:outline-none'
+        className='h-8 w-[5.5rem] rounded-md border border-fg/25 bg-canvas px-2 font-mono text-[13px] focus:border-accent focus:outline-none'
         value={draft ?? formatClipTime(seconds)}
         onChange={(event) => setDraft(event.target.value)}
         onBlur={commit}

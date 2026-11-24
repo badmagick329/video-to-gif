@@ -20,7 +20,7 @@ export default function SessionResults({
         Made this session
       </h3>
       {results.length === 0 ? (
-        <p className='text-sm text-foreground-dg/60'>
+        <p className='text-sm text-fg/60'>
           Nothing yet. Your files show up here.
         </p>
       ) : (
@@ -28,7 +28,7 @@ export default function SessionResults({
           {results.map((result) => (
             <li
               key={result.id}
-              className='flex flex-col gap-2 rounded-md border border-foreground-dg/15 p-2'
+              className='flex flex-col gap-2 rounded-md border border-fg/15 p-2'
             >
               {'failed' in result ? (
                 <FailedRow result={result} />
@@ -50,7 +50,7 @@ function FailedRow({
 }) {
   return (
     <div className='flex flex-col gap-1 text-left'>
-      <p className='text-sm font-semibold text-red-500'>
+      <p className='text-sm font-semibold text-danger'>
         {fileTypeInfo[result.fileType].label} conversion failed
       </p>
       {result.reason && (
@@ -69,9 +69,9 @@ export function ErrorDetails({
   details: string;
 }) {
   return (
-    <details className='text-xs text-foreground-dg/80'>
+    <details className='text-xs text-fg/80'>
       <summary className='cursor-pointer select-none'>{summary}</summary>
-      <pre className='mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded bg-background-dg p-2 font-mono'>
+      <pre className='mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded bg-canvas p-2 font-mono'>
         {details}
       </pre>
     </details>
@@ -131,8 +131,8 @@ function OutputRow({
           <p className='truncate text-sm' title={result.path}>
             {result.name}
           </p>
-          <p className='text-xs text-foreground-dg/70'>
-            <span className='font-semibold text-foreground-dg'>{label}</span> ·{' '}
+          <p className='text-xs text-fg/70'>
+            <span className='font-semibold text-fg'>{label}</span> ·{' '}
             {result.width} × {result.height} · {formatBytes(result.size)}
           </p>
         </div>
@@ -140,7 +140,7 @@ function OutputRow({
       <div className='flex gap-2'>
         <button
           type='button'
-          className='rounded-md bg-primary-dg px-3 py-1.5 text-sm font-semibold hover:bg-primary-dg/80'
+          className='rounded-md bg-accent px-3 py-1.5 text-sm font-semibold hover:bg-accent/80'
           aria-label={`Open ${result.name}`}
           onClick={act(openOutput)}
         >
@@ -148,7 +148,7 @@ function OutputRow({
         </button>
         <button
           type='button'
-          className='rounded-md border border-foreground-dg/25 px-3 py-1.5 text-sm hover:bg-foreground-dg/10'
+          className='rounded-md border border-fg/25 px-3 py-1.5 text-sm hover:bg-fg/10'
           aria-label={`Show ${result.name} in folder`}
           onClick={act(showOutputInFolder)}
         >
@@ -156,7 +156,7 @@ function OutputRow({
         </button>
       </div>
       {problem && (
-        <p role='alert' className='text-xs text-red-500'>
+        <p role='alert' className='text-xs text-danger'>
           {problem}
         </p>
       )}

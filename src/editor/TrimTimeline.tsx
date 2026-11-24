@@ -165,7 +165,7 @@ export default function TrimTimeline({
   });
 
   const handle =
-    'absolute -bottom-px -top-px z-20 grid w-3.5 place-items-center bg-primary-dg outline-none before:absolute before:-inset-x-2 before:inset-y-0 after:h-[18px] after:w-0.5 after:rounded-sm after:bg-black/50 focus-visible:ring-2 focus-visible:ring-foreground-dg';
+    'absolute -bottom-px -top-px z-20 grid w-3.5 place-items-center bg-accent outline-none before:absolute before:-inset-x-2 before:inset-y-0 after:h-[18px] after:w-0.5 after:rounded-sm after:bg-black/50 focus-visible:ring-2 focus-visible:ring-fg';
 
   return (
     <div className='px-3.5 pt-5'>
@@ -173,7 +173,7 @@ export default function TrimTimeline({
         ref={strip}
         role='group'
         aria-label='Trim timeline'
-        className={`relative h-16 touch-none select-none rounded-[10px] border border-foreground-dg/15 bg-foreground-dg/10 ${disabled ? 'cursor-not-allowed' : 'cursor-pointer'}`}
+        className={`relative h-16 touch-none select-none rounded-[10px] border border-fg/15 bg-fg/10 ${disabled ? 'cursor-not-allowed' : 'cursor-pointer'}`}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={endDrag}
@@ -209,7 +209,7 @@ export default function TrimTimeline({
         />
         <div
           data-part='span'
-          className={`absolute -bottom-px -top-px rounded-md border-2 border-primary-dg ${disabled ? '' : 'cursor-grab active:cursor-grabbing'}`}
+          className={`absolute -bottom-px -top-px rounded-md border-2 border-accent ${disabled ? '' : 'cursor-grab active:cursor-grabbing'}`}
           style={{ left: percent(start), width: percent(end - start) }}
         />
         <div
@@ -233,7 +233,7 @@ export default function TrimTimeline({
           <div
             {...slider('playhead')}
             aria-label='Playhead'
-            className={`pointer-events-auto absolute -left-[7px] top-0 h-3.5 w-4 rounded-t bg-white shadow outline-none after:absolute after:left-[3px] after:top-[13px] after:border-[5px] after:border-transparent after:border-t-white focus-visible:ring-2 focus-visible:ring-primary-dg ${disabled ? '' : 'cursor-grab active:cursor-grabbing'}`}
+            className={`pointer-events-auto absolute -left-[7px] top-0 h-3.5 w-4 rounded-t bg-white shadow outline-none after:absolute after:left-[3px] after:top-[13px] after:border-[5px] after:border-transparent after:border-t-white focus-visible:ring-2 focus-visible:ring-accent ${disabled ? '' : 'cursor-grab active:cursor-grabbing'}`}
           />
         </div>
       </div>

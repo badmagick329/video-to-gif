@@ -33,12 +33,12 @@ export default function App() {
 
   switch (startup.stage) {
     case 'checking':
-      return <main className='min-h-screen bg-background-dg' aria-busy='true' />;
+      return <main className='min-h-screen bg-canvas' aria-busy='true' />;
     case 'setup':
       return <SetupMessage tools={startup.tools} />;
     case 'failed':
       return (
-        <main className='flex min-h-screen items-center justify-center bg-background-dg p-8 text-foreground-dg'>
+        <main className='flex min-h-screen items-center justify-center bg-canvas p-8 text-fg'>
           <p role='alert'>Could not check for ffmpeg: {startup.message}</p>
         </main>
       );

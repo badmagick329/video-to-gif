@@ -169,19 +169,19 @@ export default function AdvancedEditor({
       ref={editor}
       className='grid w-full max-w-6xl grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_23rem] lg:items-start'
     >
-      <div className='flex min-w-0 flex-col gap-3 rounded-md bg-secondary-dg p-3 shadow-glow-secondary-dg'>
+      <div className='flex min-w-0 flex-col gap-3 rounded-md bg-panel p-3'>
         <div className='flex items-center justify-between gap-2'>
           <p className='truncate' title={path}>
             {truncateText(name, 40)}
             {preview.stage === 'ready' && preview.kind === 'proxy' && (
-              <span className='ml-2 text-xs text-foreground-dg/60'>
+              <span className='ml-2 text-xs text-fg/60'>
                 (preview copy)
               </span>
             )}
           </p>
           <button
             type='button'
-            className='text-foreground-dg/80 hover:text-foreground-dg disabled:opacity-50'
+            className='text-fg/80 hover:text-fg disabled:opacity-50'
             disabled={converting}
             aria-label={`Remove ${name}`}
             onClick={onRemove}
@@ -214,7 +214,7 @@ export default function AdvancedEditor({
       </div>
       <aside
         aria-label='Output settings'
-        className='flex min-w-0 flex-col gap-4 rounded-md bg-secondary-dg p-3 text-left shadow-glow-secondary-dg'
+        className='flex min-w-0 flex-col gap-4 rounded-md bg-panel p-3 text-left'
       >
         <AdvancedPreview
           video={video}
@@ -245,7 +245,7 @@ export default function AdvancedEditor({
               <ExportProgress job={job} />
               <button
                 type='button'
-                className='h-9 rounded-md border border-foreground-dg/25 text-sm hover:bg-foreground-dg/10 disabled:opacity-50'
+                className='h-9 rounded-md border border-fg/25 text-sm hover:bg-fg/10 disabled:opacity-50'
                 disabled={job.cancelling}
                 onClick={onCancel}
               >
@@ -255,7 +255,7 @@ export default function AdvancedEditor({
           ) : (
             <button
               type='button'
-              className='rounded-md bg-primary-dg px-4 py-3 font-semibold hover:bg-primary-dg/80 disabled:cursor-not-allowed disabled:opacity-50'
+              className='rounded-md bg-accent px-4 py-3 font-semibold hover:bg-accent/80 disabled:cursor-not-allowed disabled:opacity-50'
               disabled={!canConvert}
               onClick={() => void convert()}
             >
@@ -273,9 +273,9 @@ export default function AdvancedEditor({
           {notice && (
             <div
               role={notice.failed ? 'alert' : 'status'}
-              className='flex flex-col gap-1 text-sm text-foreground-dg/80'
+              className='flex flex-col gap-1 text-sm text-fg/80'
             >
-              <p className={notice.failed ? 'text-red-500' : undefined}>
+              <p className={notice.failed ? 'text-danger' : undefined}>
                 {notice.text}
               </p>
               {notice.details && (
@@ -301,10 +301,10 @@ function ExportProgress({ job }: { job: ExportJob }) {
       aria-valuemin={0}
       aria-valuemax={100}
       aria-valuenow={Math.round(progress * 100)}
-      className='relative h-11 overflow-hidden rounded-md bg-background-dg'
+      className='relative h-11 overflow-hidden rounded-md bg-canvas'
     >
       <div
-        className='absolute inset-y-0 left-0 bg-primary-dg/70 transition-[width]'
+        className='absolute inset-y-0 left-0 bg-accent/70 transition-[width]'
         style={{ width: `${progress * 100}%` }}
       />
       <p className='relative grid h-full place-items-center text-sm font-semibold'>
@@ -328,7 +328,7 @@ function progressText(job: ExportJob, index: number): string {
 function SaveToRow({ saveTo, disabled }: { saveTo: SaveTo; disabled: boolean }) {
   const { destination, error, choose, saveBesideSource } = saveTo;
   const button =
-    'rounded-md border border-foreground-dg/25 px-2 py-1 text-xs hover:bg-foreground-dg/10 disabled:opacity-50';
+    'rounded-md border border-fg/25 px-2 py-1 text-xs hover:bg-fg/10 disabled:opacity-50';
   return (
     <div
       role='group'
@@ -336,12 +336,12 @@ function SaveToRow({ saveTo, disabled }: { saveTo: SaveTo; disabled: boolean }) 
       className='flex flex-col gap-1.5 text-sm'
     >
       <p className='min-w-0'>
-        <span className='text-foreground-dg/70'>Save to </span>
+        <span className='text-fg/70'>Save to </span>
         <span className='break-all font-semibold' title={destination?.folder}>
           {destination?.folder ?? '…'}
         </span>
         {destination?.from === 'source' && (
-          <span className='text-foreground-dg/60'> (the video&apos;s folder)</span>
+          <span className='text-fg/60'> (the video&apos;s folder)</span>
         )}
       </p>
       <div className='flex flex-wrap gap-2'>
@@ -365,7 +365,7 @@ function SaveToRow({ saveTo, disabled }: { saveTo: SaveTo; disabled: boolean }) 
         )}
       </div>
       {error && (
-        <p role='alert' className='text-xs text-red-500'>
+        <p role='alert' className='text-xs text-danger'>
           {error}
         </p>
       )}
@@ -392,7 +392,7 @@ function MemoryWarning({
   // Warns, never blocks: the PC is the user's to page.
   if (!fits)
     return (
-      <p role='alert' className='text-sm text-amber-200'>
+      <p role='alert' className='text-sm text-warn'>
         {holder} holds about {held} of frames in memory and {free} is free, so
         Windows will page to disk and the PC may crawl.{' '}
         {limitSeconds !== null && limitSeconds > 0
@@ -403,7 +403,7 @@ function MemoryWarning({
   // Fits, but a run this big can push the rest of the PC into its page file.
   if (heldBytes > availableBytes / 2)
     return (
-      <p className='text-sm text-amber-200'>
+      <p className='text-sm text-warn'>
         {holder} will keep about {held} of frames in memory, more than half of
         the {free} free now.
       </p>
@@ -432,14 +432,14 @@ function ProxyProgress({ name, progress }: { name: string; progress: number }) {
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuenow={percent}
-        className='relative h-2 overflow-hidden rounded-md bg-background-dg'
+        className='relative h-2 overflow-hidden rounded-md bg-canvas'
       >
         <div
-          className='absolute inset-y-0 left-0 bg-primary-dg/70 transition-[width]'
+          className='absolute inset-y-0 left-0 bg-accent/70 transition-[width]'
           style={{ width: `${percent}%` }}
         />
       </div>
-      <p className='text-xs text-foreground-dg/70'>
+      <p className='text-xs text-fg/70'>
         The player can&apos;t show this file as it is, so ffmpeg makes a
         smaller copy to trim and crop against. Your files are still made from
         the original.

@@ -8,10 +8,13 @@ importers:
 
   .:
     dependencies:
-      '@fontsource/anton':
-        specifier: ^5.3.0
+      '@fontsource-variable/inter':
+        specifier: 5.3.0
         version: 5.3.0
-      '@fontsource/quicksand':
+      '@fontsource-variable/jetbrains-mono':
+        specifier: 5.3.0
+        version: 5.3.0
+      '@fontsource/anton':
         specifier: ^5.3.0
         version: 5.3.0
       '@radix-ui/react-switch':
@@ -240,11 +243,14 @@ packages:
       '@noble/hashes':
         optional: true
 
+  '@fontsource-variable/inter@5.3.0':
+    resolution: {integrity: sha512-OupL48va4JNofb97w6NYeF9S7W/kHNKM0Er8Dem5nqi4jeOLrVJDoE8tZEpnMJmtkvNbB1EIPPwHcdkF6b1oUA==}
+
+  '@fontsource-variable/jetbrains-mono@5.3.0':
+    resolution: {integrity: sha512-F32xpS2NsGYoQi2ADSkKTgpJj7ozajsGgDJ8woTnqjmIB+dxDIqImjl4pXZVEExu8UFZ2ndhmX18EBS/hdz3Lw==}
+
   '@fontsource/anton@5.3.0':
     resolution: {integrity: sha512-OR1D5n124n2XRs66SbX7IjcOSptljEJE8FcDNnlni2y1/M6KpTx7cU2PIWzTSsBj4WFkHPw24On8qw3qkQZuTw==}
-
-  '@fontsource/quicksand@5.3.0':
-    resolution: {integrity: sha512-epmMUyXI39f88bZSCyKlHTZqUWg4O7DqrTXOKqsqbVKMLshX9RtIYCUIw+G2nOfEwdIHIjYbeWdwHRcEzRXBRQ==}
 
   '@humanfs/core@0.19.2':
     resolution: {integrity: sha512-UhXNm+CFMWcbChXywFwkmhqjs3PRCmcSa/hfBgLIb7oQ5HNb1wS0icWsGtSAUNgefHeI+eBrA8I1fxmbHsGdvA==}
@@ -1921,9 +1927,11 @@ snapshots:
 
   '@exodus/bytes@1.16.0': {}
 
-  '@fontsource/anton@5.3.0': {}
+  '@fontsource-variable/inter@5.3.0': {}
 
-  '@fontsource/quicksand@5.3.0': {}
+  '@fontsource-variable/jetbrains-mono@5.3.0': {}
+
+  '@fontsource/anton@5.3.0': {}
 
   '@humanfs/core@0.19.2':
     dependencies:

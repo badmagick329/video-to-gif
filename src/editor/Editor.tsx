@@ -38,15 +38,15 @@ export default function Editor() {
   useClipShortcuts({ openFile: () => void chooseFile() }, {});
 
   return (
-    <main className='flex min-h-dvh w-full flex-col bg-background-dg'>
+    <main className='flex min-h-dvh w-full flex-col bg-canvas'>
       <h1 className='sr-only'>video-to-gif</h1>
       <div className='flex w-full grow flex-col items-center gap-5 px-2 py-5'>
         <button
           type='button'
           className={clsx(
-            'flex flex-col items-center gap-4 bg-secondary-dg',
+            'flex flex-col items-center gap-4 bg-panel',
             'rounded-md px-6 py-8 hover:cursor-pointer',
-            `shadow-glow-secondary-dg ${dragging && 'scale-110'}`,
+            ` ${dragging && 'scale-110'}`,
             `transition-all`
           )}
           onClick={() => void chooseFile()}
@@ -68,7 +68,7 @@ export default function Editor() {
           <p aria-busy='true'>Opening {fileName(state.path)}…</p>
         )}
         {state.stage === 'failed' && (
-          <p role='alert' className='max-w-2xl font-semibold text-red-500'>
+          <p role='alert' className='max-w-2xl font-semibold text-danger'>
             {state.message}
           </p>
         )}
@@ -93,7 +93,7 @@ export default function Editor() {
           />
         ) : (
           results.length > 0 && (
-            <div className='w-full max-w-md rounded-md bg-secondary-dg p-4 shadow-glow-secondary-dg'>
+            <div className='w-full max-w-md rounded-md bg-panel p-4'>
               <SessionResults results={results} />
             </div>
           )

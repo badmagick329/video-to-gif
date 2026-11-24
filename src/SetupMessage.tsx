@@ -19,23 +19,23 @@ export default function SetupMessage({ tools }: { tools: FfmpegTools }) {
   ].filter((p): p is string => p !== null);
 
   return (
-    <main className='flex min-h-screen items-center justify-center bg-background-dg p-8 text-foreground-dg'>
+    <main className='flex min-h-screen items-center justify-center bg-canvas p-8 text-fg'>
       <section
         aria-labelledby='setup-heading'
-        className='flex max-w-xl flex-col gap-4 rounded-md bg-secondary-dg p-6 shadow-glow-secondary-dg'
+        className='flex max-w-xl flex-col gap-4 rounded-md bg-panel p-6'
       >
         <h1 id='setup-heading' className='text-2xl font-semibold'>
           ffmpeg is needed
         </h1>
-        <ul className='list-disc pl-5 text-sm text-amber-200'>
+        <ul className='list-disc pl-5 text-sm text-warn'>
           {problems.map((p) => (
             <li key={p}>{p}</li>
           ))}
         </ul>
-        <p className='text-sm text-foreground-dg/80'>
+        <p className='text-sm text-fg/80'>
           video-to-gif runs your own ffmpeg. Install ffmpeg, which includes
           ffprobe (for example{' '}
-          <code className='rounded bg-background-dg px-1'>
+          <code className='rounded bg-canvas px-1'>
             winget install Gyan.FFmpeg
           </code>
           ), make sure both <code>ffmpeg</code> and <code>ffprobe</code> are on

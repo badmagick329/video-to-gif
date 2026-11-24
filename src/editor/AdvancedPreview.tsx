@@ -16,7 +16,7 @@ import type { FileTypeEstimate } from './useSizeEstimate';
 const previewBox = 300;
 
 const pill =
-  'rounded-full border border-foreground-dg/20 px-2 py-0.5 text-xs tabular-nums';
+  'rounded-full border border-fg/20 px-2 py-0.5 text-xs tabular-nums';
 
 /**
  * Gif Studio's *Output preview*: the selection as it will encode, with the
@@ -60,11 +60,11 @@ export default function AdvancedPreview({
   return (
     <figure
       aria-label='Output preview'
-      className='flex flex-col gap-2 rounded-md bg-background-dg/60 p-3'
+      className='flex flex-col gap-2 rounded-md bg-canvas/60 p-3'
     >
       <figcaption className='flex items-center justify-between text-sm font-semibold'>
         Output preview
-        <span className='text-xs font-normal text-foreground-dg/60'>
+        <span className='text-xs font-normal text-fg/60'>
           live{settings.speed !== 1 && ` · ${formatSpeed(settings.speed)}`}
         </span>
       </figcaption>
@@ -86,7 +86,7 @@ export default function AdvancedPreview({
         )}
       </div>
       {settings.direction !== 'forward' && (
-        <p className='text-xs text-foreground-dg/70'>
+        <p className='text-xs text-fg/70'>
           The preview plays forward.{' '}
           {settings.direction === 'reverse' ? 'Reverse' : 'Boomerang'} is
           applied when you convert.
@@ -140,7 +140,7 @@ function SizePill({
           <span
             role='img'
             aria-label='Estimating'
-            className='inline-block h-2.5 w-12 animate-pulse rounded-sm bg-foreground-dg/20 align-middle'
+            className='inline-block h-2.5 w-12 animate-pulse rounded-sm bg-fg/20 align-middle'
           />
         </span>
       );
@@ -158,7 +158,7 @@ function SizePill({
           aria-label={`${label} about ${formatBytes(estimate.bytes)}${estimate.state === 'stale' ? ', updating' : ''}`}
         >
           {label}{' '}
-          <b className={estimate.state === 'stale' ? 'text-foreground-dg/40' : undefined}>
+          <b className={estimate.state === 'stale' ? 'text-fg/40' : undefined}>
             ≈ {formatBytes(estimate.bytes)}
           </b>
         </span>
@@ -183,5 +183,5 @@ function EstimateNote({
   if (pending && playing) text = 'Sizes update when the video stops.';
   else if (states.includes('stale')) text = 'Updating sizes…';
   else if (pending) text = 'Encoding short samples of the selection…';
-  return <p className='text-xs text-foreground-dg/60'>{text}</p>;
+  return <p className='text-xs text-fg/60'>{text}</p>;
 }

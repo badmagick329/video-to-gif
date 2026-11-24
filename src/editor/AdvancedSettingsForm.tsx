@@ -20,12 +20,12 @@ import {
 } from './lib/advanced';
 
 const chip =
-  'h-8 rounded-md px-2.5 text-sm text-foreground-dg/80 hover:bg-foreground-dg/10 hover:text-foreground-dg aria-pressed:bg-primary-dg aria-pressed:font-semibold aria-pressed:text-foreground-dg disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent';
+  'h-8 rounded-md px-2.5 text-sm text-fg/80 hover:bg-fg/10 hover:text-fg aria-pressed:bg-accent aria-pressed:font-semibold aria-pressed:text-fg disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent';
 const field =
-  'h-8 rounded-md border border-foreground-dg/25 bg-background-dg px-2 text-sm focus:border-primary-dg focus:outline-none';
-const range = 'min-w-0 grow accent-primary-dg';
+  'h-8 rounded-md border border-fg/25 bg-canvas px-2 text-sm focus:border-accent focus:outline-none';
+const range = 'min-w-0 grow accent-accent';
 const button =
-  'flex h-8 items-center gap-1.5 rounded-md border border-foreground-dg/25 px-2.5 text-sm hover:bg-foreground-dg/10 aria-pressed:border-primary-dg aria-pressed:bg-primary-dg/15 aria-pressed:font-semibold';
+  'flex h-8 items-center gap-1.5 rounded-md border border-fg/25 px-2.5 text-sm hover:bg-fg/10 aria-pressed:border-accent aria-pressed:bg-accent/15 aria-pressed:font-semibold';
 
 /** Gif Studio's settings column: Size, Timing, Edit, Quality & looping, Save as. */
 export default function AdvancedSettingsForm({
@@ -171,13 +171,13 @@ export default function AdvancedSettingsForm({
         <div
           role='group'
           aria-label='Direction'
-          className='grid grid-cols-3 gap-0.5 rounded-lg border border-foreground-dg/25 bg-background-dg p-0.5'
+          className='grid grid-cols-3 gap-0.5 rounded-lg border border-fg/25 bg-canvas p-0.5'
         >
           {directionOptions.map(({ value, label }) => (
             <button
               key={value}
               type='button'
-              className='h-7 rounded-md text-sm text-foreground-dg/70 hover:text-foreground-dg aria-pressed:bg-foreground-dg/15 aria-pressed:font-semibold aria-pressed:text-foreground-dg'
+              className='h-7 rounded-md text-sm text-fg/70 hover:text-fg aria-pressed:bg-fg/15 aria-pressed:font-semibold aria-pressed:text-fg'
               aria-pressed={settings.direction === value}
               onClick={() => update({ direction: value })}
             >
@@ -232,7 +232,7 @@ export default function AdvancedSettingsForm({
             Flip ↕
           </button>
           {settings.rotation !== 0 && (
-            <span className='text-sm tabular-nums text-foreground-dg/70'>
+            <span className='text-sm tabular-nums text-fg/70'>
               Turned {settings.rotation}°
             </span>
           )}
@@ -321,7 +321,7 @@ export default function AdvancedSettingsForm({
               {settings.gifColors}
             </span>
           </div>
-          <p className='-mt-2 text-xs text-foreground-dg/60'>
+          <p className='-mt-2 text-xs text-fg/60'>
             Fewer colours make a smaller GIF; 64 to 128 is often plenty.
           </p>
           <div className='flex items-center gap-2'>
@@ -400,14 +400,14 @@ export default function AdvancedSettingsForm({
                   aria-describedby={
                     settings.keepSound && soundDropped ? soundNoteId : undefined
                   }
-                  className='data-[state=checked]:bg-primary-dg data-[state=unchecked]:bg-foreground-dg/20'
+                  className='data-[state=checked]:bg-accent data-[state=unchecked]:bg-fg/20'
                 />
                 <label htmlFor={soundId} className='cursor-pointer'>
                   Keep sound in MP4
                 </label>
               </span>
               {settings.keepSound && soundDropped && (
-                <p id={soundNoteId} className='text-xs text-amber-200'>
+                <p id={soundNoteId} className='text-xs text-warn'>
                   {soundDropped}
                 </p>
               )}
@@ -421,12 +421,12 @@ export default function AdvancedSettingsForm({
           {fileTypeOrder.map((fileType) => (
             <label
               key={fileType}
-              className='flex cursor-pointer flex-col gap-0.5 rounded-md border border-foreground-dg/25 p-2 has-[:checked]:border-primary-dg has-[:checked]:bg-primary-dg/15'
+              className='flex cursor-pointer flex-col gap-0.5 rounded-md border border-fg/25 p-2 has-[:checked]:border-accent has-[:checked]:bg-accent/15'
             >
               <span className='flex items-center gap-1.5 text-sm font-semibold'>
                 <input
                   type='checkbox'
-                  className='accent-primary-dg'
+                  className='accent-accent'
                   checked={settings.fileTypes.includes(fileType)}
                   onChange={(event) =>
                     toggleFileType(fileType, event.target.checked)
@@ -434,7 +434,7 @@ export default function AdvancedSettingsForm({
                 />
                 {fileTypeInfo[fileType].label}
               </span>
-              <small className='text-xs text-foreground-dg/60'>
+              <small className='text-xs text-fg/60'>
                 {fileTypeInfo[fileType].note}
               </small>
             </label>
