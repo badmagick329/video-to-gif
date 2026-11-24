@@ -52,6 +52,10 @@ pub struct ExportRequest {
     pub keep_sound: bool,
     /// The captions drawn as a transparent PNG at the exact output size, when there are any.
     pub captions: Option<Vec<u8>>,
+    /// The user saw the frame-memory warning and chose Convert anyway: run even though the held
+    /// frames exceed free memory and Windows will page. Absent means not accepted.
+    #[serde(default)]
+    pub accept_paging: bool,
 }
 
 /// What the memory estimate needs: everything that decides the output's frames, nothing about
@@ -95,6 +99,8 @@ pub struct ExportPlan {
     /// A PNG of exactly [`Selection::size`].
     pub captions: Option<Vec<u8>>,
     pub destination: PathBuf,
+    /// Run even when the held frames exceed free memory ([`ExportRequest::accept_paging`]).
+    pub accept_paging: bool,
 }
 
 /// How far a trim's end may pass the probed duration and still count as the end: the player's
@@ -131,6 +137,7 @@ impl ExportRequest {
             keep_sound,
             captions: self.captions,
             destination,
+            accept_paging: self.accept_paging,
         })
     }
 }

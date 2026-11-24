@@ -945,6 +945,36 @@ fn a_run_needing_more_memory_than_is_free_is_refused_before_ffmpeg_starts() {
 }
 
 #[test]
+fn a_run_whose_paging_was_accepted_goes_ahead() {
+    let dir = TempDir::new().unwrap();
+    let source = clip(dir.path());
+    let destination = TempDir::new().unwrap();
+    let work = TempDir::new().unwrap();
+    let plan = request(
+        &source,
+        json!({ "acceptPaging": true, "settings": { "direction": "reverse", "fileTypes": ["gif"] } }),
+    )
+    .validate(destination.path().to_owned())
+    .unwrap();
+    let outputs = run(
+        &plan,
+        Environment {
+            ffmpeg: &ffmpeg(),
+            work_dir: work.path(),
+            available_memory: Some(1),
+        },
+        &ExportControl::default(),
+        |_| {},
+        |_| {},
+    )
+    .unwrap();
+    assert!(
+        matches!(&outputs[..], [ExportOutput::Done { .. }]),
+        "{outputs:?}"
+    );
+}
+
+#[test]
 fn one_export_runs_at_a_time() {
     let exports = Exports::default();
     let running = exports.begin().unwrap();

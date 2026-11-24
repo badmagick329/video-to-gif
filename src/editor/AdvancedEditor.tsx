@@ -116,13 +116,11 @@ export default function AdvancedEditor({
     { path, info, trim, crop, settings, size },
     playing || converting
   );
-  // The engine refuses a run whose held frames exceed free memory; say so before Convert.
-  const tooBig = memory !== null && !memory.fits;
+  // Held frames past free memory make Windows page. The warning says so and Convert becomes
+  // Convert anyway, which tells Rust the user accepted it; the user decides.
+  const paging = memory !== null && !memory.fits;
   const canConvert =
-    !converting &&
-    settings.fileTypes.length > 0 &&
-    !tooBig &&
-    destination !== null;
+    !converting && settings.fileTypes.length > 0 && destination !== null;
 
   const convert = async () => {
     if (!canConvert || !destination) return;
@@ -144,6 +142,7 @@ export default function AdvancedEditor({
           settings: { ...settings, fileTypes },
           keepSound: settings.keepSound && hasAudio(info),
           captions,
+          acceptPaging: paging,
         },
         destination.folder
       );
@@ -262,7 +261,9 @@ export default function AdvancedEditor({
             >
               {settings.fileTypes.length === 0
                 ? 'Pick a file type to save as'
-                : `Convert to ${fileTypeOrder
+                : paging
+                  ? 'Convert anyway'
+                  : `Convert to ${fileTypeOrder
                     .filter((type) => settings.fileTypes.includes(type))
                     .map((type) => fileTypeInfo[type].label)
                     .join(' + ')}`}
@@ -388,14 +389,15 @@ function MemoryWarning({
   const holder = memoryHolder(settings.direction);
   const held = formatBytes(heldBytes);
   const free = formatBytes(availableBytes);
+  // Warns, never blocks: the PC is the user's to page.
   if (!fits)
     return (
       <p role='alert' className='text-sm text-amber-200'>
-        {holder} keeps every frame in memory: about {held}, and {free} is free
-        now, so this selection is too long to convert.{' '}
+        {holder} holds about {held} of frames in memory and {free} is free, so
+        Windows will page to disk and the PC may crawl.{' '}
         {limitSeconds !== null && limitSeconds > 0
-          ? `Trim it to ${formatClipTime(Math.floor(limitSeconds * 100) / 100)} or less, or lower the width or frame rate.`
-          : 'Lower the width or frame rate.'}
+          ? `Lower the width or frame rate, or trim to ${formatClipTime(Math.floor(limitSeconds * 100) / 100)} or less, to stay in memory.`
+          : 'Lower the width or frame rate to stay in memory.'}
       </p>
     );
   // Fits, but a run this big can push the rest of the PC into its page file.

@@ -48,4 +48,9 @@ export type ExportRequest = {
   keepSound: boolean;
   /** The captions as a transparent PNG at the exact output size, when there are any. */
   captions?: Uint8Array;
+  /**
+   * The user saw the frame-memory warning and chose Convert anyway. Without it Rust refuses a
+   * run whose held frames exceed free memory.
+   */
+  acceptPaging?: boolean;
 };

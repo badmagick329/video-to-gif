@@ -105,7 +105,7 @@ pub fn cancel_size_estimate(app: AppHandle) {
 /// as each settles. Resolves with every output once the last has settled; a failed or cancelled
 /// file type is an output with that status, not an error. Rejects with an [`ExportError`] when the
 /// export cannot start: a bad request, ffmpeg missing, not enough free memory for the frames
-/// Reverse, Boomerang or a GIF hold, or another export running.
+/// Reverse, Boomerang or a GIF hold (unless `request.acceptPaging`), or another export running.
 #[tauri::command]
 pub async fn run_export(
     app: AppHandle,
@@ -173,7 +173,7 @@ pub fn cancel_export(app: AppHandle) {
 
 /// How much memory the frames of an export with these settings would hold, against the
 /// machine's free memory now, so the UI can warn before Convert. `run_export` refuses a run that
-/// does not fit.
+/// does not fit unless the request accepts paging.
 #[tauri::command]
 pub fn estimate_export_memory(request: MemoryRequest) -> Result<MemoryEstimate, ExportError> {
     let selection = request.validate()?;

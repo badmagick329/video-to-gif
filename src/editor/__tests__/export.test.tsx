@@ -255,7 +255,7 @@ describe('Made this session', () => {
 });
 
 describe('Frame-memory guard', () => {
-  test('disables Convert and says how long a selection fits when the engine would refuse it', async () => {
+  test('warns that Windows will page, and Convert anyway sends the acceptance', async () => {
     await openEditor({
       estimate_export_memory: async () => ({
         heldBytes: 6 * gib,
@@ -263,11 +263,18 @@ describe('Frame-memory guard', () => {
         limitSeconds: 2.5,
         fits: false,
       }),
+      run_export: () => new Promise(() => {}),
     });
-    await waitFor(() => expect(convertButton()).toBeDisabled());
+    const anyway = await screen.findByRole('button', { name: 'Convert anyway' });
     expect(screen.getByRole('alert')).toHaveTextContent(
-      'Making a GIF keeps every frame in memory: about 6.0 GiB, and 4.0 GiB is free now, so this selection is too long to convert. Trim it to 0:02.50 or less, or lower the width or frame rate.'
+      'Making a GIF holds about 6.0 GiB of frames in memory and 4.0 GiB is free, so Windows will page to disk and the PC may crawl. Lower the width or frame rate, or trim to 0:02.50 or less, to stay in memory.'
     );
+    expect(anyway).toBeEnabled();
+    fireEvent.click(anyway);
+    await waitFor(() => expect(invoked('run_export')).toHaveLength(1));
+    expect(invoked('run_export')[0]).toMatchObject({
+      request: { acceptPaging: true },
+    });
     // The estimate is asked for the clip and settings Convert would send.
     expect(invoked('estimate_export_memory').at(-1)).toMatchObject({
       request: { info: sourceInfo(), settings: { fileTypes: ['gif'] } },

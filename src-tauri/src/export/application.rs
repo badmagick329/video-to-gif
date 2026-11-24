@@ -166,7 +166,8 @@ pub struct Environment<'a> {
     pub available_memory: Option<u64>,
 }
 
-/// Runs `plan`: refuses it when its frames would not fit in free memory, writes the caption image,
+/// Runs `plan`: refuses it when its frames would not fit in free memory unless the user accepted
+/// paging (`plan.accept_paging`, sent after the UI's warning), writes the caption image,
 /// then makes each ticked file type in order (GIF, WebP, MP4), one ffmpeg at a time. A file type
 /// that fails is reported and the rest still run, as in mgck. Returns one [`ExportOutput`] per
 /// file type, each also passed to `on_output` as it settles.
@@ -182,7 +183,9 @@ pub fn run(
     mut on_output: impl FnMut(&ExportOutput),
 ) -> Result<Vec<ExportOutput>, ExportError> {
     let estimate = MemoryEstimate::new(&plan.selection, env.available_memory);
-    if !estimate.fits {
+    // The guard warns rather than blocks: the UI shows the warning and Convert anyway sends the
+    // acceptance. A request without it is refused, so no caller pages the machine by accident.
+    if !estimate.fits && !plan.accept_paging {
         return Err(ExportError::NotEnoughMemory {
             held_bytes: estimate.held_bytes,
             available_bytes: env.available_memory.unwrap_or_default(),

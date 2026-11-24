@@ -2,7 +2,8 @@
 //! (`advanced.ts`). mgck checked against a fixed budget measured for ffmpeg.wasm's 2 GiB heap;
 //! here the budget is the machine's free physical memory, read when the estimate is asked for.
 //! Native ffmpeg does not stall at a heap limit, but a run that outgrows free RAM pages the whole
-//! machine to disk for minutes, so the guard still refuses it up front.
+//! machine to disk for minutes, so the UI warns before such a run and `run_export` refuses it unless
+//! the user chose Convert anyway.
 
 use serde::Serialize;
 
@@ -73,8 +74,8 @@ pub struct MemoryEstimate {
     /// The longest selection, in seconds, that fits in `available_bytes` with these settings;
     /// `None` when nothing is held or the free memory is unknown.
     pub limit_seconds: Option<f64>,
-    /// Whether an export would start: always, unless the free memory is known and smaller than
-    /// `held_bytes`.
+    /// Whether an export would start without the user accepting paging: always, unless the free
+    /// memory is known and smaller than `held_bytes`.
     pub fits: bool,
 }
 
