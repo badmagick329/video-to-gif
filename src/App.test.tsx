@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react';
 import { invoke } from '@tauri-apps/api/core';
 
 import App from './App';
-import type { FfmpegTools, Tool } from './probe';
+import type { FfmpegTools, Tool } from './ipc/probe';
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }));
 // The main view listens for drops and proxy progress once ffmpeg is found.

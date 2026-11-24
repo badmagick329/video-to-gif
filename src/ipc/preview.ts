@@ -22,6 +22,7 @@ export type PreviewError =
   | { kind: 'notOpen'; path: string }
   | { kind: 'ffmpegMissing' }
   | { kind: 'proxyFailed'; reason: string }
+  | { kind: 'thumbnailsFailed'; reason: string }
   | { kind: 'cancelled' };
 
 /**
@@ -42,6 +43,17 @@ export function openSource(
  */
 export function makeProxy(path: string): Promise<string> {
   return invoke<string>('make_proxy', { path });
+}
+
+/** Thumbnails in the trim timeline's strip; Rust's `THUMBNAIL_COUNT`. */
+export const timelineThumbnailCount = 24;
+
+/**
+ * Resolves to the paths of the open source's timeline thumbnails, in time order, made by ffmpeg
+ * from the preview source. Rejects with a PreviewError.
+ */
+export function makeThumbnails(path: string): Promise<string[]> {
+  return invoke<string[]>('make_thumbnails', { path });
 }
 
 export function onProxyProgress(

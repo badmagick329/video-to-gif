@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 
-import { findFfmpeg, type FfmpegTools } from './probe';
-import SourcePreview from './SourcePreview';
+import { findFfmpeg, type FfmpegTools } from './ipc/probe';
+import Editor from './editor/Editor';
 import SetupMessage from './SetupMessage';
 
 type Startup =
@@ -33,16 +33,16 @@ export default function App() {
 
   switch (startup.stage) {
     case 'checking':
-      return <main className='min-h-screen bg-zinc-950' aria-busy='true' />;
+      return <main className='min-h-screen bg-background-dg' aria-busy='true' />;
     case 'setup':
       return <SetupMessage tools={startup.tools} />;
     case 'failed':
       return (
-        <main className='flex min-h-screen items-center justify-center bg-zinc-950 p-8 text-zinc-100'>
+        <main className='flex min-h-screen items-center justify-center bg-background-dg p-8 text-foreground-dg'>
           <p role='alert'>Could not check for ffmpeg: {startup.message}</p>
         </main>
       );
     case 'ready':
-      return <SourcePreview />;
+      return <Editor />;
   }
 }

@@ -1,3 +1,43 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/*
+ * mgck's globals.css values for the Discord GIF page's tokens. mgck follows the system theme by
+ * default (next-themes, `defaultTheme='system'`), so the dark values apply through the media
+ * query here instead of a `.dark` class.
+ */
+@layer base {
+  :root {
+    --background-dg: 250 50% 85%;
+    --foreground-dg: 224 71.4% 4.1%;
+    --primary-dg: 25 95% 53%;
+    --primary-dg-foreground: 220.9 39.3% 95%;
+    --secondary-dg: 250 50% 95%;
+    --secondary-dg-foreground: 210 20% 98%;
+    --border: 220 13% 91%;
+    --radius: 0.5rem;
+    color-scheme: light;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --background-dg: 0 0% 3%;
+      --foreground-dg: 210 20% 98%;
+      --primary-dg: 25 95% 53%;
+      --primary-dg-foreground: 220.9 39.3% 95%;
+      --secondary-dg: 0 0% 10%;
+      --secondary-dg-foreground: 210 20% 98%;
+      --border: 215 27.9% 16.9%;
+      color-scheme: dark;
+    }
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background-dg font-sans tracking-wide text-foreground-dg;
+  }
+}

@@ -1,8 +1,9 @@
 //! The open source and its proxy, for the app's whole run.
 //!
 //! One source is open at a time, with at most one proxy, kept in the session's temp folder and
-//! reused until another source replaces it. Replacing the source cancels a proxy build still
-//! running and deletes the old proxy; shutting down does the same and deletes the temp folder.
+//! reused until another source replaces it, and at most one folder of timeline thumbnails.
+//! Replacing the source cancels a proxy build still running and deletes the old proxy and
+//! thumbnails; shutting down does the same and deletes the temp folder.
 
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
@@ -10,6 +11,7 @@ use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 use crate::preview::domain::{PreviewError, PreviewSource, choose_preview_source, proxy_args};
 use crate::preview::infrastructure::proxy::ProxyJob;
 use crate::preview::infrastructure::temp_folder::TempFolder;
+use crate::preview::infrastructure::thumbnails;
 use crate::probe::domain::SourceInfo;
 
 /// The preview slice's state, managed by Tauri for the app's lifetime.
@@ -24,6 +26,8 @@ struct State {
     current: Option<Current>,
     /// Numbers proxy files, so a new proxy never reuses the name of one still being deleted.
     next_proxy: u64,
+    /// Numbers thumbnail folders, for the same reason.
+    next_thumbnails: u64,
     shut_down: bool,
 }
 
@@ -32,6 +36,15 @@ struct Current {
     source: PathBuf,
     info: SourceInfo,
     proxy: Proxy,
+    /// The finished thumbnails, kept so a second request (React's development double effects)
+    /// costs nothing.
+    thumbnails: Option<Thumbnails>,
+}
+
+#[derive(Debug)]
+struct Thumbnails {
+    dir: PathBuf,
+    files: Vec<PathBuf>,
 }
 
 #[derive(Debug)]
@@ -76,12 +89,13 @@ impl Previewer {
                 folder,
                 current: None,
                 next_proxy: 1,
+                next_thumbnails: 1,
                 shut_down: false,
             }),
         }
     }
 
-    /// The folder proxies are written to.
+    /// The session folder, where proxies and thumbnail folders are written.
     pub fn proxy_dir(&self) -> PathBuf {
         lock(&self.state).folder.session_dir().to_owned()
     }
@@ -97,11 +111,15 @@ impl Previewer {
             _ => {
                 if let Some(previous) = state.current.take() {
                     discard(previous.proxy, false);
+                    if let Some(thumbnails) = previous.thumbnails {
+                        let _ = std::fs::remove_dir_all(thumbnails.dir);
+                    }
                 }
                 state.current = Some(Current {
                     source,
                     info,
                     proxy: Proxy::None,
+                    thumbnails: None,
                 });
             }
         }
@@ -185,6 +203,82 @@ impl Previewer {
         drop(state);
         build.complete(result.clone());
         result
+    }
+
+    /// The open source's timeline thumbnails, in time order: the existing ones, or new ones made
+    /// with the ffmpeg that `ffmpeg` resolves from the preview source, the proxy once it is built
+    /// and the source otherwise. Blocks while ffmpeg runs. Fails with [`PreviewError::NotOpen`]
+    /// unless `source` is the open source, and with [`PreviewError::Cancelled`] if another source
+    /// replaces it first.
+    pub fn thumbnails(
+        &self,
+        source: &Path,
+        ffmpeg: impl FnOnce() -> Option<PathBuf>,
+    ) -> Result<Vec<PathBuf>, PreviewError> {
+        let mut state = lock(&self.state);
+        if state.shut_down {
+            return Err(PreviewError::Cancelled);
+        }
+        let current = state
+            .current
+            .as_ref()
+            .filter(|c| c.source == source)
+            .ok_or_else(|| PreviewError::NotOpen {
+                path: source.display().to_string(),
+            })?;
+        if let Some(thumbnails) = &current.thumbnails {
+            return Ok(thumbnails.files.clone());
+        }
+        let input = match &current.proxy {
+            Proxy::Ready(proxy) => proxy.clone(),
+            _ => source.to_owned(),
+        };
+        let duration = current.info.duration;
+        let ffmpeg = ffmpeg().ok_or(PreviewError::FfmpegMissing)?;
+        let dir = state
+            .folder
+            .session_dir()
+            .join(format!("thumbs-{}", state.next_thumbnails));
+        state.next_thumbnails += 1;
+        drop(state);
+
+        // Not cancellable: one pass takes seconds, and a replaced source's folder is deleted
+        // below once it ends.
+        let result = std::fs::create_dir(&dir)
+            .map_err(|err| PreviewError::ThumbnailsFailed {
+                reason: err.to_string(),
+            })
+            .and_then(|()| thumbnails::make(&ffmpeg, &input, duration, &dir));
+
+        let mut state = lock(&self.state);
+        let shut_down = state.shut_down;
+        let current = state
+            .current
+            .as_mut()
+            .filter(|c| c.source == source && !shut_down);
+        match (result, current) {
+            (Ok(files), Some(current)) => match &current.thumbnails {
+                // Another request finished first; keep one folder.
+                Some(kept) => {
+                    let _ = std::fs::remove_dir_all(&dir);
+                    Ok(kept.files.clone())
+                }
+                None => {
+                    current.thumbnails = Some(Thumbnails {
+                        dir,
+                        files: files.clone(),
+                    });
+                    Ok(files)
+                }
+            },
+            (result, current) => {
+                let _ = std::fs::remove_dir_all(&dir);
+                match (result, current) {
+                    (Err(err), Some(_)) => Err(err),
+                    _ => Err(PreviewError::Cancelled),
+                }
+            }
+        }
     }
 
     /// Stops any proxy build, waiting for ffmpeg to exit so it holds no file open, then deletes

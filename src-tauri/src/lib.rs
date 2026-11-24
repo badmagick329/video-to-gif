@@ -22,6 +22,7 @@ pub fn run() {
             probe::presentation::probe_source,
             preview::presentation::open_source,
             preview::presentation::make_proxy,
+            preview::presentation::make_thumbnails,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

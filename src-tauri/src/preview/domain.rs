@@ -137,6 +137,68 @@ pub fn progress_from_line(line: &str, duration: f64) -> Option<f64> {
     }
 }
 
+/// Frames in the trim timeline's thumbnail strip, mgck's `timelineThumbnailCount`.
+pub const THUMBNAIL_COUNT: u32 = 24;
+
+/// Height of each thumbnail, in pixels: mgck draws them 72 high.
+pub const THUMBNAIL_HEIGHT: u32 = 72;
+
+/// Past this many seconds, thumbnails come from keyframes only (gif-studio's `makeStrip`).
+const KEYFRAMES_ONLY_AFTER: f64 = 90.0;
+
+/// The ffmpeg arguments that write the timeline's [`THUMBNAIL_COUNT`] thumbnails of `input`, a
+/// preview source `duration` seconds long, into `dir` as `thumb-01.jpg` onwards, in time order.
+///
+/// One ffmpeg pass samples the middle of each of the strip's equal slices (mgck seeks the
+/// `<video>` to the same times): the input `-ss` skips half a slice and `fps` takes one frame a
+/// slice from there. `tpad` repeats the last frame so the strip always fills: without it, and
+/// `eof_action=pass`, `fps` stops at the last decoded frame, one short on any clip and several
+/// short when only sparse keyframes are decoded. Seeking a hidden `<video>` instead took 20 s for a 2-minute 4K H.264 MP4
+/// with a keyframe every 10 s, where this pass takes under a second.
+///
+/// Like gif-studio, a source longer than [`KEYFRAMES_ONLY_AFTER`] is decoded at keyframes only
+/// (`-skip_frame nokey`), so a long 4K file costs a read rather than a full decode; each
+/// thumbnail is then the last keyframe before its time, which a strip can afford. A proxy has a
+/// keyframe every second.
+pub fn thumbnail_args(input: &Path, duration: f64, dir: &Path) -> Vec<OsString> {
+    let slice = duration / f64::from(THUMBNAIL_COUNT);
+    let mut args: Vec<OsString> = ["-hide_banner", "-v", "error", "-nostats", "-y"]
+        .map(OsString::from)
+        .into();
+    if duration > KEYFRAMES_ONLY_AFTER {
+        args.extend(["-skip_frame", "nokey"].map(OsString::from));
+    }
+    args.extend(
+        [
+            "-ss".to_owned(),
+            format!("{:.3}", slice / 2.0),
+            "-i".to_owned(),
+        ]
+        .map(OsString::from),
+    );
+    args.push(input.into());
+    args.extend(
+        [
+            "-map".to_owned(),
+            "0:V:0".to_owned(),
+            "-an".to_owned(),
+            "-vf".to_owned(),
+            format!(
+                "tpad=stop_mode=clone:stop_duration={duration:.3},fps=1/{slice:.6}:eof_action=pass,scale=-2:{THUMBNAIL_HEIGHT}"
+            ),
+            "-frames:v".to_owned(),
+            THUMBNAIL_COUNT.to_string(),
+            "-q:v".to_owned(),
+            "5".to_owned(),
+            "-f".to_owned(),
+            "image2".to_owned(),
+        ]
+        .map(OsString::from),
+    );
+    args.push(dir.join("thumb-%02d.jpg").into());
+    args
+}
+
 /// Progress of a proxy build, emitted to the frontend as the `proxy-progress` event.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -168,6 +230,8 @@ pub enum PreviewError {
     FfmpegMissing,
     /// ffmpeg could not start or failed; `reason` is its last error line.
     ProxyFailed { reason: String },
+    /// ffmpeg could not make the timeline thumbnails; `reason` is its last error line.
+    ThumbnailsFailed { reason: String },
     /// The build was stopped because another source was opened or the app is closing.
     Cancelled,
 }
@@ -185,6 +249,7 @@ impl fmt::Display for PreviewError {
             PreviewError::NotOpen { path } => write!(f, "{path} is not the open source"),
             PreviewError::FfmpegMissing => write!(f, "ffmpeg was not found on PATH"),
             PreviewError::ProxyFailed { reason } => write!(f, "proxy failed: {reason}"),
+            PreviewError::ThumbnailsFailed { reason } => write!(f, "thumbnails failed: {reason}"),
             PreviewError::Cancelled => write!(f, "proxy build cancelled"),
         }
     }
@@ -318,6 +383,31 @@ mod tests {
         silent.has_audio = false;
         let args = args_text(&silent);
         assert!(!args.iter().any(|arg| arg == "-c:a" || arg == "0:a:0"));
+    }
+
+    #[test]
+    fn thumbnails_sample_slice_middles_and_read_keyframes_only_past_90_seconds() {
+        let text = |duration: f64| -> Vec<String> {
+            thumbnail_args(
+                Path::new("C:\\in.mp4"),
+                duration,
+                Path::new("C:\\tmp\\thumbs-1"),
+            )
+            .iter()
+            .map(|arg| arg.to_string_lossy().into_owned())
+            .collect()
+        };
+        let short = text(48.0);
+        assert!(has_pair(&short, "-ss", "1.000"));
+        assert!(has_pair(
+            &short,
+            "-vf",
+            "tpad=stop_mode=clone:stop_duration=48.000,fps=1/2.000000:eof_action=pass,scale=-2:72"
+        ));
+        assert!(has_pair(&short, "-frames:v", "24"));
+        assert!(!short.iter().any(|arg| arg == "-skip_frame"));
+        assert_eq!(short.last().unwrap(), "C:\\tmp\\thumbs-1\\thumb-%02d.jpg");
+        assert!(has_pair(&text(187.0), "-skip_frame", "nokey"));
     }
 
     #[test]

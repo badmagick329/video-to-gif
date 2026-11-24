@@ -14,10 +14,15 @@
     "check": "cargo fmt --manifest-path src-tauri/Cargo.toml --check && cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings && cargo test --manifest-path src-tauri/Cargo.toml && tsc --noEmit && eslint . && vitest run"
   },
   "dependencies": {
+    "@fontsource/anton": "^5.3.0",
+    "@fontsource/quicksand": "^5.3.0",
+    "@radix-ui/react-switch": "^1.4.1",
     "@tauri-apps/api": "^2.12.5",
     "@tauri-apps/plugin-dialog": "^2.8.4",
+    "clsx": "^2.1.1",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "react-icons": "^5.7.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

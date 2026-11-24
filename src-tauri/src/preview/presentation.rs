@@ -1,7 +1,7 @@
 //! The preview slice's Tauri commands, its `proxy-progress` event, and its part in the app's
 //! startup and exit.
 //!
-//! The webview reads the source and proxies through Tauri's asset protocol. Its scope starts
+//! The webview reads the source, proxies and thumbnails through Tauri's asset protocol. Its scope starts
 //! empty (`tauri.conf.json`); this module widens it at runtime to this session's temp folder and
 //! to each source as it is opened, so the webview can read nothing else on disk.
 
@@ -20,11 +20,12 @@ use crate::search_path::SearchPath;
 pub const PROXY_PROGRESS_EVENT: &str = "proxy-progress";
 
 /// Sweeps the temp folder of what a crashed session left, creates this session's folder, lets
-/// the webview read it, and puts the [`Previewer`] in Tauri's state. Called from the app's setup.
+/// the webview read it and its subfolders, and puts the [`Previewer`] in Tauri's state. Called from the app's setup.
 pub fn set_up(app: &App) -> Result<(), Box<dyn Error>> {
     let previewer = Previewer::new(TempFolder::create(&TempFolder::default_root())?);
+    // Recursive, for the thumbnail folders inside it; the app writes everything in there.
     app.asset_protocol_scope()
-        .allow_directory(previewer.proxy_dir(), false)?;
+        .allow_directory(previewer.proxy_dir(), true)?;
     app.manage(previewer);
     Ok(())
 }
@@ -85,6 +86,28 @@ pub async fn make_proxy(app: AppHandle, path: String) -> Result<String, PreviewE
     })
     .await
     .expect("make_proxy task panicked")
+}
+
+/// Returns the paths of the open source's timeline thumbnails, in time order, making them from the
+/// preview source first if needed. `path` must be the open source. The files live in this
+/// session's temp folder, which the webview may read.
+#[tauri::command]
+pub async fn make_thumbnails(app: AppHandle, path: String) -> Result<Vec<String>, PreviewError> {
+    // ffmpeg runs for seconds; keep it off the async runtime's workers.
+    tauri::async_runtime::spawn_blocking(move || {
+        let previewer = app.state::<Previewer>();
+        let ffmpeg = || SearchPath::from_env().locate_tools().ffmpeg;
+        previewer
+            .thumbnails(&PathBuf::from(&path), ffmpeg)
+            .map(|files| {
+                files
+                    .iter()
+                    .map(|file| file.display().to_string())
+                    .collect()
+            })
+    })
+    .await
+    .expect("make_thumbnails task panicked")
 }
 
 /// Rejects source info no probe could have produced; the frontend sends back what

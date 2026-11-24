@@ -389,3 +389,44 @@ fn a_source_ffmpeg_cannot_read_fails_with_its_reason() {
     }
     assert_eq!(proxies_in(&previewer), Vec::<PathBuf>::new());
 }
+
+#[test]
+fn thumbnails_are_a_strip_of_24_frames_72_high_kept_until_the_source_is_replaced() {
+    let clips = TempDir::new().unwrap();
+    let first = long_clip(clips.path(), "first.mp4");
+    let second = clips.path().join("second.mp4");
+    std::fs::copy(&first, &second).unwrap();
+    let (_temp, _root, previewer) = previewer();
+    previewer.open(first.clone(), info(1920, 1080, 20.0, "h264", false));
+
+    let thumbnails = previewer.thumbnails(&first, ffmpeg_path).unwrap();
+    assert_eq!(thumbnails.len(), 24);
+    for thumbnail in &thumbnails {
+        assert!(thumbnail.starts_with(previewer.proxy_dir()));
+        let video = &ffprobe(thumbnail)["streams"][0];
+        assert_eq!(
+            (video["width"].as_u64(), video["height"].as_u64()),
+            (Some(128), Some(72))
+        );
+    }
+    // testsrc2 changes every frame, so a strip of one repeated frame would show here.
+    assert_ne!(
+        std::fs::read(&thumbnails[0]).unwrap(),
+        std::fs::read(&thumbnails[23]).unwrap()
+    );
+
+    let no_ffmpeg = || -> Option<PathBuf> { panic!("kept thumbnails must not run ffmpeg") };
+    assert_eq!(previewer.thumbnails(&first, no_ffmpeg).unwrap(), thumbnails);
+    assert_eq!(
+        previewer.thumbnails(&second, ffmpeg_path),
+        Err(PreviewError::NotOpen {
+            path: second.display().to_string()
+        })
+    );
+
+    previewer.open(second, info(1920, 1080, 20.0, "h264", false));
+    assert!(
+        !thumbnails[0].parent().unwrap().exists(),
+        "the replaced source's thumbnails must be deleted"
+    );
+}
