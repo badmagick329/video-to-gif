@@ -1,9 +1,9 @@
 //! The export slice's Tauri commands, its `export-progress` and `export-output` events, and its
 //! part in the app's startup and exit.
 //!
-//! Each finished output is added to the asset protocol's scope as it is made, so the results list
-//! can play it, and to [`SessionOutputs`], so Open, Show in folder and Copy accept it. Nothing
-//! else the export touches becomes readable.
+//! Each finished output is added to the asset protocol's scope as it is made, so the session list
+//! can draw its thumbnail, and to [`SessionOutputs`], so Open, Show in folder and Copy accept it.
+//! Nothing else the export touches becomes readable.
 
 use std::error::Error;
 use std::path::{Path, PathBuf};
