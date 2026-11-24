@@ -8,10 +8,13 @@
 use std::error::Error;
 use std::path::{Path, PathBuf};
 
+use tauri::ipc::Channel;
 use tauri::{AppHandle, Emitter, Manager, State};
 
+use crate::export::application::estimate::{self, Estimates};
 use crate::export::application::session_outputs::SessionOutputs;
 use crate::export::application::{self, Environment, Exports};
+use crate::export::domain::estimate::SizeEstimate;
 use crate::export::domain::memory::MemoryEstimate;
 use crate::export::domain::outcome::{DestinationError, ExportError, ExportOutput, OutputError};
 use crate::export::domain::plan::{ExportRequest, MemoryRequest};
@@ -26,21 +29,75 @@ pub const EXPORT_PROGRESS_EVENT: &str = "export-progress";
 /// them.
 pub const EXPORT_OUTPUT_EVENT: &str = "export-output";
 
-/// Puts the export state, the session's outputs and the remembered destination in Tauri's state.
-/// Called from the app's setup.
+/// Puts the export and estimate state, the session's outputs and the remembered destination in
+/// Tauri's state. Called from the app's setup.
 pub fn set_up(app: &tauri::App) -> Result<(), Box<dyn Error>> {
     app.manage(Exports::default());
+    app.manage(Estimates::default());
     app.manage(SessionOutputs::default());
     app.manage(SavedDestination::in_dir(&app.path().app_config_dir()?));
     Ok(())
 }
 
-/// Cancels a running export and waits for it to delete its partial file. Called when the app
-/// exits, before the preview slice deletes the temp folder.
+/// Cancels a running export and waits for it to delete its partial file, and stops a running
+/// size estimate. Called when the app exits, before the preview slice deletes the temp folder.
 pub fn shut_down(app: &AppHandle) {
+    if let Some(estimates) = app.try_state::<Estimates>() {
+        estimates.cancel(true);
+    }
     if let Some(exports) = app.try_state::<Exports>() {
         exports.shut_down();
     }
+}
+
+/// Estimates the size of each ticked file type in `request` (the request `run_export` takes) by
+/// encoding samples of it in the background, sending each [`SizeEstimate`] on `on_estimate` as it
+/// settles. Resolves with all of them. Starting an estimate cancels the running one, whose file
+/// types settle as cancelled. Rejects with an [`ExportError`] for a bad request, ffmpeg missing,
+/// or an export running (`busy`): estimates pause while one does.
+#[tauri::command]
+pub async fn estimate_output_size(
+    app: AppHandle,
+    request: ExportRequest,
+    on_estimate: Channel<SizeEstimate>,
+) -> Result<Vec<SizeEstimate>, ExportError> {
+    // Trust boundary, as for run_export.
+    let source = PathBuf::from(&request.path);
+    if !source.is_absolute() || !source.is_file() {
+        return Err(ExportError::NotFound { path: request.path });
+    }
+    let work_dir = temp_folder::session_dir(&TempFolder::default_root());
+    // The samples go to the temp folder; the plan's destination is never written to.
+    let plan = request.validate(work_dir.clone())?;
+    if app.state::<Exports>().is_running() {
+        return Err(ExportError::Busy);
+    }
+    let control = app.state::<Estimates>().begin();
+
+    tauri::async_runtime::spawn_blocking(move || {
+        let ffmpeg = SearchPath::from_env()
+            .locate_tools()
+            .ffmpeg
+            .ok_or(ExportError::FfmpegMissing)?;
+        let env = Environment {
+            ffmpeg: &ffmpeg,
+            work_dir: &work_dir,
+            available_memory: memory::available_bytes(),
+        };
+        // A failed send only costs the UI an update; the resolved value still carries them all.
+        Ok(estimate::estimate(&plan, env, &control, &|size| {
+            let _ = on_estimate.send(size.clone());
+        }))
+    })
+    .await
+    .expect("estimate task panicked")
+}
+
+/// Stops the running size estimate, if any. Returns at once. The editor calls it on every change,
+/// while the video plays, and before an export.
+#[tauri::command]
+pub fn cancel_size_estimate(app: AppHandle) {
+    app.state::<Estimates>().cancel(false);
 }
 
 /// Exports the source in `request` into the folder `destination`, one output per ticked file type
@@ -76,6 +133,8 @@ pub async fn run_export(
         let work_dir = temp_folder::session_dir(&TempFolder::default_root());
         let exports = app.state::<Exports>();
         let running = exports.begin()?;
+        // Estimates pause while an export runs: they would slow it, and its settings are final.
+        app.state::<Estimates>().cancel(false);
         let env = Environment {
             ffmpeg: &ffmpeg,
             work_dir: &work_dir,

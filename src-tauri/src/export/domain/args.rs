@@ -82,8 +82,50 @@ pub const RUNNER_ARGS: [&str; 6] = [
 /// output file is byte for byte what [`single_pass_args`] makes.
 pub fn job_args(pass: &SinglePass<'_>) -> Vec<OsString> {
     let mut args: Vec<OsString> = RUNNER_ARGS.map(OsString::from).into();
-    args.extend(pass_args(pass, true));
+    args.extend(pass_args(pass, Report::FramesAndTap));
     args
+}
+
+/// A size estimate's run: what [`job_args`] runs, so the sample carries every setting, writing
+/// an `encoded=` line per frame (the frames the sample holds) but no tap, which only paces a
+/// progress bar.
+pub fn sample_args(pass: &SinglePass<'_>) -> Vec<OsString> {
+    let mut args: Vec<OsString> = RUNNER_ARGS.map(OsString::from).into();
+    args.extend(pass_args(pass, Report::Frames));
+    args
+}
+
+/// A size estimate's run over several windows of the selection at once: each window is its own
+/// input, seeked before decoding (`windows` replaces the pass's trim), runs the export's filters up
+/// to the scale, and the windows are joined before captions, direction and the encoder. A GIF's
+/// windows so share one palette, as the whole selection's frames do: a palette per window
+/// overestimated busy footage by 15 to 23%. Writes an `encoded=` line per frame, like
+/// [`sample_args`].
+pub fn windowed_sample_args(pass: &SinglePass<'_>, windows: &[InputTrim]) -> Vec<OsString> {
+    let mut args: Vec<OsString> = RUNNER_ARGS.map(OsString::from).into();
+    for window in windows {
+        args.extend(trim_input(pass.input, Some(*window)));
+    }
+    let chain = video_chain(pass);
+    let mut selection: String = (0..windows.len())
+        .map(|i| format!("[{i}:v]{chain}[w{i}];"))
+        .collect();
+    selection.extend((0..windows.len()).map(|i| format!("[w{i}]")));
+    selection.push_str(&format!("concat=n={}:v=1:a=0", windows.len()));
+    args.extend(encode_args(pass, selection, windows.len(), Report::Frames));
+    args
+}
+
+/// What a run writes to stdout as it goes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Report {
+    /// Nothing: mgck's command, the tests' reference.
+    #[cfg(test)]
+    Nothing,
+    /// An `encoded=` line per frame entering the encoder.
+    Frames,
+    /// Those, and the tap's `tapped=` lines when the output holds its frames.
+    FramesAndTap,
 }
 
 /// One ffmpeg run per file type, in Gif Studio's filter order: crop, rotate, flips, speed, `fps`, a
@@ -93,10 +135,19 @@ pub fn job_args(pass: &SinglePass<'_>) -> Vec<OsString> {
 /// the tests' reference for what [`job_args`] must produce.
 #[cfg(test)]
 pub fn single_pass_args(pass: &SinglePass<'_>) -> Vec<OsString> {
-    pass_args(pass, false)
+    pass_args(pass, Report::Nothing)
 }
 
-fn pass_args(pass: &SinglePass<'_>, report_progress: bool) -> Vec<OsString> {
+fn pass_args(pass: &SinglePass<'_>, report: Report) -> Vec<OsString> {
+    let mut args = trim_input(pass.input, pass.trim);
+    let selection = format!("[0:v]{}", video_chain(pass));
+    args.extend(encode_args(pass, selection, 1, report));
+    args
+}
+
+/// The filters from crop to the scale, ending without a separator: crop, rotate, flips, speed,
+/// `fps`, then the lanczos scale.
+fn video_chain(pass: &SinglePass<'_>) -> String {
     let settings = pass.settings;
     let mut filters: Vec<String> = rotate_filters(settings.rotation)
         .iter()
@@ -116,34 +167,160 @@ fn pass_args(pass: &SinglePass<'_>, report_progress: bool) -> Vec<OsString> {
         .width
         .map_or_else(|| "trunc(iw/2)*2".to_owned(), |w| w.to_string());
     filters.push(format!("scale={width}:-2:flags=lanczos"));
+    format!("{}{}", crop_filter(pass.crop), filters.join(","))
+}
 
-    let overlay = if pass.captions.is_some() {
-        caption_overlay(pass.file_type)
-    } else {
-        String::new()
-    };
-    // Everything up to the direction filter: the frames of the selection, played once.
-    let selection = format!(
-        "[0:v]{}{}{}",
-        crop_filter(pass.crop),
-        filters.join(","),
-        overlay
-    );
-    let direction = direction_filter(settings.direction);
-
-    let mut args = trim_input(pass.input, pass.trim);
+/// Everything after the scaled frames: the caption image as input `video_inputs` (the inputs
+/// before it are the source's), the caption overlay, the direction, the encoder, its options and
+/// the output, with the stdout `report`. `selection` is the graph so far, ending in the scaled
+/// frames of the selection played once.
+fn encode_args(
+    pass: &SinglePass<'_>,
+    mut selection: String,
+    video_inputs: usize,
+    report: Report,
+) -> Vec<OsString> {
+    let settings = pass.settings;
+    let mut args: Vec<OsString> = Vec::new();
     if let Some(captions) = pass.captions {
         args.push("-i".into());
         args.push(captions.into());
+        selection.push_str(&caption_overlay(pass.file_type, video_inputs));
     }
+    let (tail, options) = encoder(pass, "out");
 
-    // What follows the selection in the graph, ending in `[out]`, and the encoder's options.
-    let (tail, options): (String, Vec<String>) = match pass.file_type {
+    let tap =
+        report == Report::FramesAndTap && tap_share(pass.file_type, settings.direction).is_some();
+    let graph = if tap {
+        // Every tapped tail starts with a filter (a GIF's split or `reverse`), which now follows
+        // the `[main]` label instead of a comma.
+        let tail = tail
+            .strip_prefix(',')
+            .expect("a tapped output continues with a filter");
+        format!("{selection},split[tap][main];[main]{tail}")
+    } else {
+        format!("{selection}{tail}")
+    };
+    args.extend(
+        [
+            "-filter_complex".to_owned(),
+            graph,
+            "-map".into(),
+            "[out]".into(),
+        ]
+        .into_iter()
+        .chain(options)
+        .map(OsString::from),
+    );
+    if matches!(report, Report::Frames | Report::FramesAndTap) {
+        args.extend(frame_times("v:0", ENCODED));
+    }
+    args.push(pass.output.into());
+    if tap {
+        args.extend(["-map", "[tap]"].map(OsString::from));
+        args.extend(frame_times("v", TAPPED));
+        args.extend(["-f", "null", "-"].map(OsString::from));
+    }
+    args
+}
+
+/// A stretch of the input to encode, in seconds from its first frame: a sample window inside a
+/// run that decodes the whole selection.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Span {
+    pub start: f64,
+    pub duration: f64,
+}
+
+/// One output of a [`shared_sample_args`] run.
+#[derive(Debug, Clone)]
+pub struct SharedOutput<'a> {
+    /// The export's pass for this output; its input, trim and captions are the run's.
+    pub pass: SinglePass<'a>,
+    /// Stretches of the selection to encode, joined in order, or `None` for all of it. A GIF's
+    /// windows join before `palettegen`, so they share one palette as the whole selection's frames
+    /// do: a palette per window overestimated busy footage by 15 to 23%.
+    pub spans: Option<Vec<Span>>,
+    /// Key of the `<key>=<seconds>` line written as each of its frames enters the encoder.
+    pub key: String,
+}
+
+/// Size estimate samples that share one decode: a single ffmpeg reads the selection once, as the
+/// export does (`trim` is the export's input trim), and feeds every output through its own
+/// filtergraph, which ffmpeg runs on its own thread. Each output is the export's filters and
+/// encoder for its file type, over its spans of the selection. Decoding is most of a 1080p
+/// sample's cost, and separate runs decoded the same frames once per window plus from each
+/// window's keyframe, so sharing it cut the estimate of a 20 s selection by about a second.
+pub fn shared_sample_args(
+    input: &Path,
+    trim: Option<InputTrim>,
+    captions: Option<&Path>,
+    outputs: &[SharedOutput<'_>],
+) -> Vec<OsString> {
+    let mut args: Vec<OsString> = RUNNER_ARGS.map(OsString::from).into();
+    args.extend(trim_input(input, trim));
+    if let Some(captions) = captions {
+        args.push("-i".into());
+        args.push(captions.into());
+    }
+    for (index, output) in outputs.iter().enumerate() {
+        let pass = &output.pass;
+        let chain = video_chain(pass);
+        let span_filter = |span: &Span| {
+            format!(
+                "trim=start={}:duration={},setpts=PTS-STARTPTS,{chain}",
+                span.start, span.duration
+            )
+        };
+        // Filter labels are local to their graph; only the output's must be unique in the run.
+        let mut graph = match output.spans.as_deref() {
+            None => format!("[0:v]{chain}"),
+            Some([span]) => format!("[0:v]{}", span_filter(span)),
+            Some(spans) => {
+                let mut graph = format!("[0:v]split={}", spans.len());
+                graph.extend((0..spans.len()).map(|i| format!("[s{i}]")));
+                for (i, span) in spans.iter().enumerate() {
+                    graph.push_str(&format!(";[s{i}]{}[w{i}]", span_filter(span)));
+                }
+                graph.push(';');
+                graph.extend((0..spans.len()).map(|i| format!("[w{i}]")));
+                graph.push_str(&format!("concat=n={}:v=1:a=0", spans.len()));
+                graph
+            }
+        };
+        if captions.is_some() {
+            graph.push_str(&caption_overlay(pass.file_type, 1));
+        }
+        let label = format!("o{index}");
+        let (tail, options) = encoder(pass, &label);
+        graph.push_str(&tail);
+        args.extend(
+            [
+                "-filter_complex".to_owned(),
+                graph,
+                "-map".to_owned(),
+                format!("[{label}]"),
+            ]
+            .map(OsString::from),
+        );
+        args.extend(options.into_iter().map(OsString::from));
+        args.extend(frame_times("v:0", &output.key));
+        args.push(pass.output.into());
+    }
+    args
+}
+
+/// What follows the scaled (and captioned) frames in the graph for `pass`'s file type, ending in
+/// `[label]`, and the encoder's options.
+fn encoder(pass: &SinglePass<'_>, label: &str) -> (String, Vec<String>) {
+    let settings = pass.settings;
+    let direction = direction_filter(settings.direction);
+    match pass.file_type {
         FileType::Gif => {
             // stats_mode=diff and diff_mode=rectangle spend the palette and the re-encoding on
             // what moves, which keeps static backgrounds clean.
             let tail = format!(
-                "{direction},split[a][b];[a]palettegen=max_colors={}:stats_mode=diff[p];[b][p]paletteuse={}:diff_mode=rectangle[out]",
+                "{direction},split[a][b];[a]palettegen=max_colors={}:stats_mode=diff[p];[b][p]paletteuse={}:diff_mode=rectangle[{label}]",
                 settings.gif_colors,
                 dither_option(settings.gif_dither)
             );
@@ -170,7 +347,7 @@ fn pass_args(pass: &SinglePass<'_>, report_progress: bool) -> Vec<OsString> {
                 "-loop".into(),
                 settings.plays.to_string(),
             ];
-            (format!("{direction}[out]"), options)
+            (format!("{direction}[{label}]"), options)
         }
         FileType::Mp4 => {
             let mut mp4 = vec![
@@ -193,42 +370,9 @@ fn pass_args(pass: &SinglePass<'_>, report_progress: bool) -> Vec<OsString> {
             } else {
                 mp4.push("-an".into());
             }
-            (format!("{direction},format=yuv420p[out]"), mp4)
+            (format!("{direction},format=yuv420p[{label}]"), mp4)
         }
-    };
-
-    let tap = report_progress && tap_share(pass.file_type, settings.direction).is_some();
-    let graph = if tap {
-        // Every tapped tail starts with a filter (a GIF's split or `reverse`), which now follows
-        // the `[main]` label instead of a comma.
-        let tail = tail
-            .strip_prefix(',')
-            .expect("a tapped output continues with a filter");
-        format!("{selection},split[tap][main];[main]{tail}")
-    } else {
-        format!("{selection}{tail}")
-    };
-    args.extend(
-        [
-            "-filter_complex".to_owned(),
-            graph,
-            "-map".into(),
-            "[out]".into(),
-        ]
-        .into_iter()
-        .chain(options)
-        .map(OsString::from),
-    );
-    if report_progress {
-        args.extend(frame_times("v:0", ENCODED));
     }
-    args.push(pass.output.into());
-    if tap {
-        args.extend(["-map", "[tap]"].map(OsString::from));
-        args.extend(frame_times("v", TAPPED));
-        args.extend(["-f", "null", "-"].map(OsString::from));
-    }
-    args
 }
 
 /// Output options that write `<key>=<seconds>` to stdout as each frame of the `stream` streams
@@ -277,19 +421,19 @@ pub fn trim_input(input: &Path, trim: Option<InputTrim>) -> Vec<OsString> {
     args
 }
 
-/// Composites the caption image (input 1) after the scale, so it lands on output pixels the way
+/// Composites the caption image (input `index`) after the scale, so it lands on output pixels the way
 /// the preview draws it, and after the turn and flips, so it stays upright. A single image
 /// repeats over every frame (overlay's default `eof_action=repeat`); centring it rather than
 /// pinning it at 0:0 keeps a one-row rounding difference from shifting a caption off the edge. A
 /// GIF composites in RGB, which its palette needs anyway, so the outline skips a 4:2:0 round trip;
 /// MP4 and WebP encode 4:2:0 regardless.
-fn caption_overlay(file_type: FileType) -> String {
+fn caption_overlay(file_type: FileType, index: usize) -> String {
     let format = if file_type == FileType::Gif {
         ":format=rgb"
     } else {
         ""
     };
-    format!("[scaled];[scaled][1:v]overlay=(W-w)/2:(H-h)/2{format}")
+    format!("[scaled];[scaled][{index}:v]overlay=(W-w)/2:(H-h)/2{format}")
 }
 
 /// `transpose=1` turns clockwise; a half turn is both flips.

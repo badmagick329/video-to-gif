@@ -6,6 +6,8 @@
 //! or ffprobe finds and starts it through them, and keeps its temporary files in the session's
 //! temp folder.
 
+#[cfg(test)]
+mod estimate_accuracy;
 mod export;
 mod preview;
 mod probe;
@@ -32,6 +34,8 @@ pub fn run() {
             export::presentation::run_export,
             export::presentation::cancel_export,
             export::presentation::estimate_export_memory,
+            export::presentation::estimate_output_size,
+            export::presentation::cancel_size_estimate,
             export::presentation::saved_destination,
             export::presentation::remember_destination,
             export::presentation::open_output,

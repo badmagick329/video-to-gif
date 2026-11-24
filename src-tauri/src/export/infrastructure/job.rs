@@ -11,7 +11,7 @@ use std::thread;
 use std::time::Duration;
 
 use crate::export::domain::progress::ProgressMeter;
-use crate::process;
+use crate::process::{self, Priority};
 
 /// Lines of stderr kept for a failure's reason. With `-loglevel error` these are ffmpeg's own
 /// error lines, the last of which usually names the cause and the earlier ones the filter or
@@ -47,7 +47,24 @@ impl Job {
     /// Starts `ffmpeg` with `args`, which write their progress lines to stdout
     /// (`job_args`).
     pub fn start(ffmpeg: &Path, args: &[OsString]) -> Result<(Self, JobOutput), String> {
-        let mut child = process::command(ffmpeg)
+        Self::start_at(ffmpeg, args, Priority::Normal)
+    }
+
+    /// [`Self::start`] at below-normal priority, for work the user did not ask for (size
+    /// estimates), so it never slows the player, an export or the rest of the PC.
+    pub fn start_in_background(
+        ffmpeg: &Path,
+        args: &[OsString],
+    ) -> Result<(Self, JobOutput), String> {
+        Self::start_at(ffmpeg, args, Priority::Background)
+    }
+
+    fn start_at(
+        ffmpeg: &Path,
+        args: &[OsString],
+        priority: Priority,
+    ) -> Result<(Self, JobOutput), String> {
+        let mut child = process::command_at(ffmpeg, priority)
             .args(args)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -78,11 +95,18 @@ impl Job {
         mut meter: ProgressMeter,
         mut on_progress: impl FnMut(f64),
     ) -> JobEnd {
-        for line in BufReader::new(output.stdout).lines() {
-            let Ok(line) = line else { break };
-            if let Some(progress) = meter.read_line(&line) {
+        self.finish_lines(output, |line| {
+            if let Some(progress) = meter.read_line(line) {
                 on_progress(progress);
             }
+        })
+    }
+
+    /// [`Self::finish`], handing each line of ffmpeg's stdout to `on_line` as it arrives.
+    pub fn finish_lines(&self, output: JobOutput, mut on_line: impl FnMut(&str)) -> JobEnd {
+        for line in BufReader::new(output.stdout).lines() {
+            let Ok(line) = line else { break };
+            on_line(&line);
         }
         let status = self.wait();
         let stderr = output.stderr.join().unwrap_or_default();

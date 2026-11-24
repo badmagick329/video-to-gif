@@ -133,6 +133,10 @@ impl Exports {
         })
     }
 
+    pub fn is_running(&self) -> bool {
+        lock(&self.current).is_some()
+    }
+
     /// Cancels the running export, if any. Returns at once; the export reports its outputs as
     /// cancelled when ffmpeg has exited.
     pub fn cancel(&self) {
@@ -289,6 +293,7 @@ fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(|poison| poison.into_inner())
 }
 
+pub mod estimate;
 pub mod session_outputs;
 
 #[cfg(test)]
