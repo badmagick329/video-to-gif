@@ -88,8 +88,8 @@ describe('Advanced mode', () => {
     await convert();
     expect(request()).toMatchObject({
       path: 'C:/videos/clip.mp4',
+      info: sourceInfo(),
       settings: { fileTypes: ['gif', 'mp4'], fps: 15 },
-      outputSeconds: 4,
     });
   });
 
@@ -261,9 +261,7 @@ test('the request carries every edit', async () => {
       webpQuality: 55,
       fps: 24,
     },
-    width: 480,
     keepSound: true,
-    outputSeconds: 4,
   });
 });
 

@@ -314,7 +314,6 @@ describe('Advanced mode captions', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Rotate right' }));
     await convert();
     const job = request();
-    expect(job.width).toBe(480);
     expect(String.fromCharCode(...job.captions!)).toBe('png 480x854');
     expect(job.settings).toMatchObject({ bottomText: 'BOTTOM', rotation: 90 });
   });

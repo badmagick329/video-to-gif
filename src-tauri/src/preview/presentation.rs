@@ -12,9 +12,9 @@ use tauri::{App, AppHandle, Emitter, Manager, State};
 
 use crate::preview::domain::{PreviewError, PreviewSource, ProxyProgress};
 use crate::preview::infrastructure::session::Previewer;
-use crate::preview::infrastructure::temp_folder::TempFolder;
 use crate::probe::domain::SourceInfo;
 use crate::search_path::SearchPath;
+use crate::temp_folder::TempFolder;
 
 /// Event carrying [`ProxyProgress`] while a proxy builds.
 pub const PROXY_PROGRESS_EVENT: &str = "proxy-progress";

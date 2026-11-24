@@ -10,10 +10,10 @@ use tempfile::TempDir;
 
 use super::Previewer;
 use crate::preview::domain::{PreviewError, PreviewSource};
-use crate::preview::infrastructure::temp_folder::{ROOT_NAME, TempFolder};
 use crate::probe::domain::SourceInfo;
 use crate::process;
 use crate::search_path::SearchPath;
+use crate::temp_folder::{ROOT_NAME, TempFolder};
 
 fn ffmpeg_path() -> Option<PathBuf> {
     SearchPath::from_env().locate_tools().ffmpeg

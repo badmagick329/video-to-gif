@@ -10,9 +10,9 @@ use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 
 use crate::preview::domain::{PreviewError, PreviewSource, choose_preview_source, proxy_args};
 use crate::preview::infrastructure::proxy::ProxyJob;
-use crate::preview::infrastructure::temp_folder::TempFolder;
 use crate::preview::infrastructure::thumbnails;
 use crate::probe::domain::SourceInfo;
+use crate::temp_folder::TempFolder;
 
 /// The preview slice's state, managed by Tauri for the app's lifetime.
 #[derive(Debug)]

@@ -1,4 +1,9 @@
-//! The app's temp folder, where proxies live: `<OS temp>/video-to-gif/session-<pid>/`.
+//! The app's temp folder: `<OS temp>/video-to-gif/session-<pid>/`, where preview keeps proxies and
+//! thumbnails and export keeps a run's caption image.
+//!
+//! Shared kernel, beside [`crate::process`]: the preview slice creates the session folder at
+//! startup and deletes it at exit (it owns the [`TempFolder`]); other slices only write files into
+//! [`session_dir`] and delete them when done.
 //!
 //! Each running app owns one session folder and holds an exclusive lock on a `lock` file inside
 //! it for as long as it runs. At startup a session sweeps the root: any session folder whose lock
@@ -35,7 +40,7 @@ impl TempFolder {
     pub fn create(root: &Path) -> io::Result<Self> {
         fs::create_dir_all(root)?;
         sweep(root);
-        let session = root.join(format!("{SESSION_PREFIX}{}", std::process::id()));
+        let session = session_dir(root);
         fs::create_dir_all(&session)?;
         let lock = File::create(session.join(LOCK_FILE))?;
         lock.try_lock().map_err(|err| match err {
@@ -66,6 +71,12 @@ impl TempFolder {
         let _ = fs::remove_dir(&self.root);
         Ok(())
     }
+}
+
+/// This process's session folder under `root` ([`TempFolder::default_root`] in the app). It exists
+/// while the app runs, from the preview slice's startup to its exit.
+pub fn session_dir(root: &Path) -> PathBuf {
+    root.join(format!("{SESSION_PREFIX}{}", std::process::id()))
 }
 
 /// Deletes every entry in `root` except session folders whose lock is held. Best effort: an entry

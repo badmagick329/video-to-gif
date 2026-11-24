@@ -102,13 +102,12 @@ export default function AdvancedEditor({
         : undefined;
       await onExport({
         path,
+        info,
         trim,
         crop,
         settings: { ...settings, fileTypes },
-        width: size.width,
         keepSound: settings.keepSound && hasAudio(info),
         captions,
-        outputSeconds: seconds,
       });
     } catch (error) {
       setMessage(error instanceof Error ? error.message : String(error));

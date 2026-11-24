@@ -20,5 +20,13 @@ serde_json = "1.0.154"
 tauri = { version = "2.12.7", features = ["protocol-asset"] }
 tauri-plugin-dialog = "2.8.4"
 
+# Windows APIs std does not wrap: free physical memory for the export's frame-memory guard, and a
+# rename that refuses to replace an existing output. Already in the tree through Tauri.
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61.2", features = [
+    "Win32_Storage_FileSystem",
+    "Win32_System_SystemInformation",
+] }
+
 [dev-dependencies]
 tempfile = "3.27.0"

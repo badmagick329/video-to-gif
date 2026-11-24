@@ -29,3 +29,10 @@ The Rust crate has three features from the start (probing a source, previewing i
 - Crate-level modules beside the slices form a **shared kernel**: [`process.rs`](../../src-tauri/src/process.rs) (start with no console window and a null stdin) and [`search_path.rs`](../../src-tauri/src/search_path.rs) (find `ffmpeg` and `ffprobe` on PATH as Windows does). Any slice's `infrastructure` may use them.
 - The shared kernel imports no slice and holds mechanism only; rules about what to run stay in the slice that owns them.
 - Across slices, a slice now shares its `domain` and the shared kernel, nothing else.
+
+## Amendment (2026-11-24): the temp folder joins the shared kernel
+
+Export (VTG-6) writes each run's caption image to the session temp folder, which until then lived in `preview::infrastructure`. Importing it from there would break the cross-slice rule, and a second folder would need its own startup sweep and exit cleanup.
+
+- [`temp_folder.rs`](../../src-tauri/src/temp_folder.rs) moves to the shared kernel. Its `session_dir` names this process's session folder for any slice.
+- The preview slice still creates the folder at startup and deletes it at exit; other slices only write files into it and delete their own.

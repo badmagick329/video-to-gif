@@ -13,8 +13,9 @@ import {
 import { ClipCrop, ClipTrim, ExportRequest, SessionResult } from './lib/types';
 
 /**
- * Export arrives with VTG-6 and VTG-7; until then Convert builds the request
- * and stops here.
+ * Rust's export runs behind `runExport` (`src/ipc/export.ts`); VTG-7 wires
+ * Convert to it with a destination folder, progress and results. Until then
+ * Convert builds the request and stops here.
  */
 async function exportStub(request: ExportRequest): Promise<void> {
   void request;

@@ -290,7 +290,7 @@ describe('on a proxy, sizes are in the source’s displayed pixels', () => {
     );
     expect(Math.round(request().crop!.width * uhd.width)).toBe(1215);
     expect(Math.round(request().crop!.height * uhd.height)).toBe(2160);
-    // Even, and capped at the source crop rather than the proxy's 405 px.
-    expect(request().width).toBe(1214);
+    // Export sizes the output from the source's info, not the proxy's 405 px.
+    expect(request().info).toEqual(uhd);
   });
 });
