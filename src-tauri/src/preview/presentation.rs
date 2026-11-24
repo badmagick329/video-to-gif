@@ -10,7 +10,7 @@ use std::path::PathBuf;
 
 use tauri::{App, AppHandle, Emitter, Manager, State};
 
-use crate::preview::domain::{PreviewError, PreviewSource, ProxyProgress};
+use crate::preview::domain::{PreviewError, PreviewSource, ProxyProgress, TimeRange};
 use crate::preview::infrastructure::session::Previewer;
 use crate::probe::domain::SourceInfo;
 use crate::search_path::SearchPath;
@@ -103,16 +103,21 @@ pub async fn make_proxy(app: AppHandle, path: String) -> Result<String, PreviewE
 }
 
 /// Returns the paths of the open source's timeline thumbnails, in time order, making them from the
-/// preview source first if needed. `path` must be the open source. The files live in this
-/// session's temp folder, which the webview may read.
+/// preview source first if needed: the whole source's strip, or with `range` (`{ start, end }` in
+/// seconds) a strip of just that span, which a zoomed timeline asks for. `path` must be the open
+/// source. The files live in this session's temp folder, which the webview may read.
 #[tauri::command]
-pub async fn make_thumbnails(app: AppHandle, path: String) -> Result<Vec<String>, PreviewError> {
+pub async fn make_thumbnails(
+    app: AppHandle,
+    path: String,
+    range: Option<TimeRange>,
+) -> Result<Vec<String>, PreviewError> {
     // ffmpeg runs for seconds; keep it off the async runtime's workers.
     tauri::async_runtime::spawn_blocking(move || {
         let previewer = app.state::<Previewer>();
         let ffmpeg = || SearchPath::from_env().locate_tools().ffmpeg;
         previewer
-            .thumbnails(&PathBuf::from(&path), ffmpeg)
+            .thumbnails(&PathBuf::from(&path), range, ffmpeg)
             .map(|files| {
                 files
                     .iter()

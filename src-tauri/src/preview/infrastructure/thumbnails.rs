@@ -6,18 +6,19 @@ use std::path::{Path, PathBuf};
 use crate::preview::domain::{PreviewError, thumbnail_args};
 use crate::process;
 
-/// Writes the thumbnails of `input` (`duration` seconds) into `dir`, which must exist and be
-/// empty, and returns their paths in time order. On failure `dir` is left for the caller to
-/// delete.
+/// Writes the thumbnails of `input` covering `length` seconds from `start` into `dir`, which must
+/// exist and be empty, and returns their paths in time order. On failure `dir` is left for the
+/// caller to delete.
 pub fn make(
     ffmpeg: &Path,
     input: &Path,
-    duration: f64,
+    start: f64,
+    length: f64,
     dir: &Path,
 ) -> Result<Vec<PathBuf>, PreviewError> {
     let failed = |reason: String| PreviewError::ThumbnailsFailed { reason };
     let output = process::command(ffmpeg)
-        .args(thumbnail_args(input, duration, dir))
+        .args(thumbnail_args(input, start, length, dir))
         .output()
         .map_err(|err| failed(format!("ffmpeg could not start: {err}")))?;
     if !output.status.success() {

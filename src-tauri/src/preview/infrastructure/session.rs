@@ -5,10 +5,13 @@
 //! thumbnails. Replacing or closing the source cancels a proxy build still running and deletes the
 //! old proxy and thumbnails; shutting down does the same and deletes the temp folder.
 
+use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 
-use crate::preview::domain::{PreviewError, PreviewSource, choose_preview_source, proxy_args};
+use crate::preview::domain::{
+    PreviewError, PreviewSource, TimeRange, choose_preview_source, proxy_args, thumbnail_span,
+};
 use crate::preview::infrastructure::proxy::ProxyJob;
 use crate::preview::infrastructure::thumbnails;
 use crate::probe::domain::SourceInfo;
@@ -39,7 +42,14 @@ struct Current {
     /// The finished thumbnails, kept so a second request (React's development double effects)
     /// costs nothing.
     thumbnails: Option<Thumbnails>,
+    /// The latest strips of a time range, oldest first, at most [`RANGES_KEPT`].
+    ranges: VecDeque<Thumbnails>,
 }
+
+/// Range strips kept per source. A zoomed timeline shows the latest and keeps the previous one
+/// on screen until the next arrives; the rest covers requests that finish out of order. Older
+/// folders are deleted, so scrolling a zoomed timeline for an hour leaves four folders.
+const RANGES_KEPT: usize = 4;
 
 #[derive(Debug)]
 struct Thumbnails {
@@ -117,6 +127,7 @@ impl Previewer {
                     info,
                     proxy: Proxy::None,
                     thumbnails: None,
+                    ranges: VecDeque::new(),
                 });
             }
         }
@@ -214,14 +225,18 @@ impl Previewer {
         result
     }
 
-    /// The open source's timeline thumbnails, in time order: the existing ones, or new ones made
-    /// with the ffmpeg that `ffmpeg` resolves from the preview source, the proxy once it is built
-    /// and the source otherwise. Blocks while ffmpeg runs. Fails with [`PreviewError::NotOpen`]
-    /// unless `source` is the open source, and with [`PreviewError::Cancelled`] if another source
-    /// replaces it first.
+    /// The open source's timeline thumbnails in time order, covering `range` or the whole source
+    /// when it is `None`, made with the ffmpeg that `ffmpeg` resolves from the preview source: the
+    /// proxy once it is built and the source otherwise. The whole-source strip is made once and
+    /// kept; each range gets a new strip, and only the latest [`RANGES_KEPT`] stay on disk.
+    /// Blocks while ffmpeg runs. Fails with [`PreviewError::NotOpen`] unless `source` is the open
+    /// source, with [`PreviewError::InvalidRange`] for a range outside it (see
+    /// [`thumbnail_span`]), and with [`PreviewError::Cancelled`] if another source replaces it
+    /// first.
     pub fn thumbnails(
         &self,
         source: &Path,
+        range: Option<TimeRange>,
         ffmpeg: impl FnOnce() -> Option<PathBuf>,
     ) -> Result<Vec<PathBuf>, PreviewError> {
         let mut state = lock(&self.state);
@@ -235,14 +250,18 @@ impl Previewer {
             .ok_or_else(|| PreviewError::NotOpen {
                 path: source.display().to_string(),
             })?;
-        if let Some(thumbnails) = &current.thumbnails {
+        let span = thumbnail_span(range, current.info.duration)?;
+        if let (None, Some(thumbnails)) = (span, &current.thumbnails) {
             return Ok(thumbnails.files.clone());
         }
         let input = match &current.proxy {
             Proxy::Ready(proxy) => proxy.clone(),
             _ => source.to_owned(),
         };
-        let duration = current.info.duration;
+        let (start, length) = match span {
+            Some(span) => (span.start, span.end - span.start),
+            None => (0.0, current.info.duration),
+        };
         let ffmpeg = ffmpeg().ok_or(PreviewError::FfmpegMissing)?;
         let dir = state
             .folder
@@ -257,7 +276,7 @@ impl Previewer {
             .map_err(|err| PreviewError::ThumbnailsFailed {
                 reason: err.to_string(),
             })
-            .and_then(|()| thumbnails::make(&ffmpeg, &input, duration, &dir));
+            .and_then(|()| thumbnails::make(&ffmpeg, &input, start, length, &dir));
 
         let mut state = lock(&self.state);
         let shut_down = state.shut_down;
@@ -266,6 +285,17 @@ impl Previewer {
             .as_mut()
             .filter(|c| c.source == source && !shut_down);
         match (result, current) {
+            (Ok(files), Some(current)) if span.is_some() => {
+                current.ranges.push_back(Thumbnails {
+                    dir,
+                    files: files.clone(),
+                });
+                while current.ranges.len() > RANGES_KEPT {
+                    let oldest = current.ranges.pop_front().expect("longer than kept");
+                    let _ = std::fs::remove_dir_all(oldest.dir);
+                }
+                Ok(files)
+            }
             (Ok(files), Some(current)) => match &current.thumbnails {
                 // Another request finished first; keep one folder.
                 Some(kept) => {
@@ -305,7 +335,7 @@ impl Previewer {
 /// Gives up a source that is no longer open: its proxy, as [`discard`] does, and its thumbnails.
 fn release(current: Current, wait: bool) {
     discard(current.proxy, wait);
-    if let Some(thumbnails) = current.thumbnails {
+    for thumbnails in current.thumbnails.into_iter().chain(current.ranges) {
         let _ = std::fs::remove_dir_all(thumbnails.dir);
     }
 }

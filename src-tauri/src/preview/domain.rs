@@ -5,7 +5,7 @@ use std::ffi::OsString;
 use std::fmt;
 use std::path::Path;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::probe::domain::SourceInfo;
 
@@ -186,41 +186,118 @@ pub fn progress_from_line(line: &str, duration: f64) -> Option<f64> {
     }
 }
 
-/// Frames in the trim timeline's thumbnail strip, mgck's `timelineThumbnailCount`.
+/// Frames in a strip of timeline thumbnails, whether it covers the whole source or a range.
 pub const THUMBNAIL_COUNT: u32 = 24;
 
-/// Height of each thumbnail, in pixels: mgck draws them 72 high.
+/// Height of each thumbnail, in pixels: the timeline dock's track is 72 high.
 pub const THUMBNAIL_HEIGHT: u32 = 72;
 
-/// Past this many seconds, thumbnails come from keyframes only (gif-studio's `makeStrip`).
+/// Past this many seconds of strip, thumbnails are keyframes (gif-studio's `makeStrip` draws the
+/// line at the same length): slices of 3.75 s or more, where the last keyframe before each
+/// slice's middle stands in well enough.
 const KEYFRAMES_ONLY_AFTER: f64 = 90.0;
 
-/// The ffmpeg arguments that write the timeline's [`THUMBNAIL_COUNT`] thumbnails of `input`, a
-/// preview source `duration` seconds long, into `dir` as `thumb-01.jpg` onwards, in time order.
+/// A span of the source's timeline in seconds, as the frontend asks for thumbnails of it.
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
+pub struct TimeRange {
+    pub start: f64,
+    pub end: f64,
+}
+
+/// The part of a source `duration` seconds long that a thumbnail strip should cover: `None` for
+/// the whole source, which is also what a range covering all of it means, so that strip is made
+/// once and kept. A range reaching past the end is cut there. A range that is not finite, starts
+/// before 0 or at or after the end, or ends before it starts is rejected: the command cannot
+/// assume the frontend sent a sane one.
+pub fn thumbnail_span(
+    range: Option<TimeRange>,
+    duration: f64,
+) -> Result<Option<TimeRange>, PreviewError> {
+    let Some(range) = range else {
+        return Ok(None);
+    };
+    let reason = if !(range.start.is_finite() && range.end.is_finite()) {
+        "the range must be finite"
+    } else if range.start < 0.0 || range.start >= duration {
+        "the range must start inside the source"
+    } else if range.end <= range.start {
+        "the range must end after it starts"
+    } else if range.start == 0.0 && range.end >= duration {
+        return Ok(None);
+    } else {
+        return Ok(Some(TimeRange {
+            start: range.start,
+            end: range.end.min(duration),
+        }));
+    };
+    Err(PreviewError::InvalidRange {
+        reason: reason.to_owned(),
+    })
+}
+
+/// The ffmpeg arguments that write [`THUMBNAIL_COUNT`] thumbnails of `input`, a preview source,
+/// covering `length` seconds from `start`, into `dir` as `thumb-01.jpg` onwards, in time order.
+/// Each samples the middle of one of the strip's equal slices, as mgck seeks its `<video>` to.
 ///
-/// One ffmpeg pass samples the middle of each of the strip's equal slices (mgck seeks the
-/// `<video>` to the same times): the input `-ss` skips half a slice and `fps` takes one frame a
-/// slice from there. `tpad` repeats the last frame so the strip always fills: without it, and
-/// `eof_action=pass`, `fps` stops at the last decoded frame, one short on any clip and several
-/// short when only sparse keyframes are decoded. Seeking a hidden `<video>` instead took 20 s for a 2-minute 4K H.264 MP4
-/// with a keyframe every 10 s, where this pass takes under a second.
+/// A strip up to [`KEYFRAMES_ONLY_AFTER`] long, such as the ranges a zoomed timeline asks for, is
+/// one decoding pass: the input `-ss` skips to the first slice's middle and `fps` takes one frame
+/// a slice from there, so each thumbnail is the first frame at or after its slice's middle.
+/// `tpad` repeats the last frame so the strip always fills: without it, and `eof_action=pass`,
+/// `fps` stops at the last decoded frame, one short on any clip. Seeking a hidden `<video>`
+/// instead took 20 s for a 2-minute 4K H.264 MP4 with a keyframe every 10 s, where this pass
+/// takes under a second.
 ///
-/// Like gif-studio, a source longer than [`KEYFRAMES_ONLY_AFTER`] is decoded at keyframes only
-/// (`-skip_frame nokey`), so a long 4K file costs a read rather than a full decode; each
-/// thumbnail is then the last keyframe before its time, which a strip can afford. A proxy has a
-/// keyframe every second.
-pub fn thumbnail_args(input: &Path, duration: f64, dir: &Path) -> Vec<OsString> {
-    let slice = duration / f64::from(THUMBNAIL_COUNT);
+/// A longer strip seeks instead of decoding: one input per slice, each opened at its slice's
+/// middle without accurate seeking and decoding keyframes only, so each thumbnail is the last
+/// keyframe before its time and ffmpeg reads 24 keyframes rather than the whole file. On a
+/// 2-hour 1080p H.264 recording with a keyframe every 3 s that takes 3 s, where one
+/// keyframes-only pass (gif-studio's way) took 44 s, since it still demuxes every packet.
+pub fn thumbnail_args(input: &Path, start: f64, length: f64, dir: &Path) -> Vec<OsString> {
+    let slice = length / f64::from(THUMBNAIL_COUNT);
     let mut args: Vec<OsString> = ["-hide_banner", "-v", "error", "-nostats", "-y"]
         .map(OsString::from)
         .into();
-    if duration > KEYFRAMES_ONLY_AFTER {
-        args.extend(["-skip_frame", "nokey"].map(OsString::from));
+    if length > KEYFRAMES_ONLY_AFTER {
+        for index in 0..THUMBNAIL_COUNT {
+            let middle = start + slice * (f64::from(index) + 0.5);
+            args.extend(
+                [
+                    "-skip_frame",
+                    "nokey",
+                    "-noaccurate_seek",
+                    // One keyframe each; 24 decoders with a thread per core only cost startup.
+                    "-threads",
+                    "1",
+                    "-ss",
+                    &format!("{middle:.3}"),
+                    "-i",
+                ]
+                .map(OsString::from),
+            );
+            args.push(input.into());
+        }
+        for index in 0..THUMBNAIL_COUNT {
+            args.extend(
+                [
+                    "-map".to_owned(),
+                    format!("{index}:V:0"),
+                    "-frames:v".to_owned(),
+                    "1".to_owned(),
+                    "-vf".to_owned(),
+                    format!("scale=-2:{THUMBNAIL_HEIGHT}"),
+                    "-q:v".to_owned(),
+                    "5".to_owned(),
+                ]
+                .map(OsString::from),
+            );
+            args.push(dir.join(format!("thumb-{:02}.jpg", index + 1)).into());
+        }
+        return args;
     }
     args.extend(
         [
             "-ss".to_owned(),
-            format!("{:.3}", slice / 2.0),
+            format!("{:.3}", start + slice / 2.0),
             "-i".to_owned(),
         ]
         .map(OsString::from),
@@ -233,7 +310,7 @@ pub fn thumbnail_args(input: &Path, duration: f64, dir: &Path) -> Vec<OsString> 
             "-an".to_owned(),
             "-vf".to_owned(),
             format!(
-                "tpad=stop_mode=clone:stop_duration={duration:.3},fps=1/{slice:.6}:eof_action=pass,scale=-2:{THUMBNAIL_HEIGHT}"
+                "tpad=stop_mode=clone:stop_duration={length:.3},fps=1/{slice:.6}:eof_action=pass,scale=-2:{THUMBNAIL_HEIGHT}"
             ),
             "-frames:v".to_owned(),
             THUMBNAIL_COUNT.to_string(),
@@ -281,6 +358,8 @@ pub enum PreviewError {
     ProxyFailed { reason: String },
     /// ffmpeg could not make the timeline thumbnails; `reason` is its last error line.
     ThumbnailsFailed { reason: String },
+    /// The time range asked for thumbnails is impossible (not finite, empty, outside the source).
+    InvalidRange { reason: String },
     /// The build was stopped because another source was opened or the app is closing.
     Cancelled,
 }
@@ -299,6 +378,7 @@ impl fmt::Display for PreviewError {
             PreviewError::FfmpegMissing => write!(f, "ffmpeg was not found on PATH"),
             PreviewError::ProxyFailed { reason } => write!(f, "proxy failed: {reason}"),
             PreviewError::ThumbnailsFailed { reason } => write!(f, "thumbnails failed: {reason}"),
+            PreviewError::InvalidRange { reason } => write!(f, "invalid range: {reason}"),
             PreviewError::Cancelled => write!(f, "proxy build cancelled"),
         }
     }
@@ -503,17 +583,18 @@ mod tests {
 
     #[test]
     fn thumbnails_sample_slice_middles_and_read_keyframes_only_past_90_seconds() {
-        let text = |duration: f64| -> Vec<String> {
+        let text = |start: f64, length: f64| -> Vec<String> {
             thumbnail_args(
                 Path::new("C:\\in.mp4"),
-                duration,
+                start,
+                length,
                 Path::new("C:\\tmp\\thumbs-1"),
             )
             .iter()
             .map(|arg| arg.to_string_lossy().into_owned())
             .collect()
         };
-        let short = text(48.0);
+        let short = text(0.0, 48.0);
         assert!(has_pair(&short, "-ss", "1.000"));
         assert!(has_pair(
             &short,
@@ -523,7 +604,66 @@ mod tests {
         assert!(has_pair(&short, "-frames:v", "24"));
         assert!(!short.iter().any(|arg| arg == "-skip_frame"));
         assert_eq!(short.last().unwrap(), "C:\\tmp\\thumbs-1\\thumb-%02d.jpg");
-        assert!(has_pair(&text(187.0), "-skip_frame", "nokey"));
+
+        // Past 90 s, one keyframe seek per slice middle, one output each.
+        let long = text(0.0, 192.0);
+        let seeks: Vec<&str> = long
+            .windows(2)
+            .filter(|pair| pair[0] == "-ss")
+            .map(|pair| pair[1].as_str())
+            .collect();
+        assert_eq!(seeks.len(), 24);
+        assert_eq!((seeks[0], seeks[23]), ("4.000", "188.000"));
+        assert_eq!(long.iter().filter(|arg| *arg == "-i").count(), 24);
+        assert!(has_pair(&long, "-skip_frame", "nokey"));
+        assert!(long.iter().any(|arg| arg == "-noaccurate_seek"));
+        assert!(has_pair(&long, "-map", "23:V:0"));
+        assert_eq!(long.last().unwrap(), "C:\\tmp\\thumbs-1\\thumb-24.jpg");
+
+        // A zoomed range of 2.4 s deep in a long source starts there and is decoded in full.
+        let range = text(1500.0, 2.4);
+        assert!(has_pair(&range, "-ss", "1500.050"));
+        assert!(has_pair(
+            &range,
+            "-vf",
+            "tpad=stop_mode=clone:stop_duration=2.400,fps=1/0.100000:eof_action=pass,scale=-2:72"
+        ));
+        assert!(!range.iter().any(|arg| arg == "-skip_frame"));
+    }
+
+    #[test]
+    fn a_thumbnail_range_is_cut_at_the_end_and_the_whole_source_is_no_range() {
+        let range = |start: f64, end: f64| thumbnail_span(Some(TimeRange { start, end }), 60.0);
+        assert_eq!(thumbnail_span(None, 60.0), Ok(None));
+        assert_eq!(range(0.0, 60.0), Ok(None));
+        assert_eq!(range(0.0, 75.0), Ok(None));
+        assert_eq!(
+            range(10.0, 12.5),
+            Ok(Some(TimeRange {
+                start: 10.0,
+                end: 12.5
+            }))
+        );
+        assert_eq!(
+            range(50.0, 70.0),
+            Ok(Some(TimeRange {
+                start: 50.0,
+                end: 60.0
+            }))
+        );
+        for (start, end) in [
+            (-1.0, 5.0),
+            (60.0, 61.0),
+            (5.0, 5.0),
+            (6.0, 5.0),
+            (f64::NAN, 5.0),
+            (0.0, f64::INFINITY),
+        ] {
+            assert!(
+                matches!(range(start, end), Err(PreviewError::InvalidRange { .. })),
+                "{start}..{end} must be rejected"
+            );
+        }
     }
 
     #[test]

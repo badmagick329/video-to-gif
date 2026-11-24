@@ -9,7 +9,7 @@ use std::time::{Duration, Instant};
 use tempfile::TempDir;
 
 use super::Previewer;
-use crate::preview::domain::{PreviewError, PreviewSource};
+use crate::preview::domain::{PreviewError, PreviewSource, TimeRange};
 use crate::probe::domain::SourceInfo;
 use crate::process;
 use crate::search_path::SearchPath;
@@ -399,7 +399,7 @@ fn thumbnails_are_a_strip_of_24_frames_72_high_kept_until_the_source_is_replaced
     let (_temp, _root, previewer) = previewer();
     previewer.open(first.clone(), info(1920, 1080, 20.0, "h264", false));
 
-    let thumbnails = previewer.thumbnails(&first, ffmpeg_path).unwrap();
+    let thumbnails = previewer.thumbnails(&first, None, ffmpeg_path).unwrap();
     assert_eq!(thumbnails.len(), 24);
     for thumbnail in &thumbnails {
         assert!(thumbnail.starts_with(previewer.proxy_dir()));
@@ -416,9 +416,12 @@ fn thumbnails_are_a_strip_of_24_frames_72_high_kept_until_the_source_is_replaced
     );
 
     let no_ffmpeg = || -> Option<PathBuf> { panic!("kept thumbnails must not run ffmpeg") };
-    assert_eq!(previewer.thumbnails(&first, no_ffmpeg).unwrap(), thumbnails);
     assert_eq!(
-        previewer.thumbnails(&second, ffmpeg_path),
+        previewer.thumbnails(&first, None, no_ffmpeg).unwrap(),
+        thumbnails
+    );
+    assert_eq!(
+        previewer.thumbnails(&second, None, ffmpeg_path),
         Err(PreviewError::NotOpen {
             path: second.display().to_string()
         })
@@ -477,7 +480,7 @@ fn closing_the_source_deletes_its_proxy_and_thumbnails() {
     let (_temp, _root, previewer) = previewer();
     previewer.open(source.clone(), info(1440, 1080, 2.0, "hevc", true));
     let proxy = previewer.proxy(&source, ffmpeg_path, |_| {}).unwrap();
-    let thumbnails = previewer.thumbnails(&source, ffmpeg_path).unwrap();
+    let thumbnails = previewer.thumbnails(&source, None, ffmpeg_path).unwrap();
     assert_eq!(
         proxies_in(&previewer).len(),
         2,
@@ -507,4 +510,195 @@ fn closing_a_source_that_is_not_open_leaves_the_open_one_alone() {
     assert!(proxy.exists());
     let no_ffmpeg = || -> Option<PathBuf> { panic!("the kept proxy must not be rebuilt") };
     assert_eq!(previewer.proxy(&open, no_ffmpeg, |_| {}).unwrap(), proxy);
+}
+
+/// Grey frames whose brightness counts the frame modulo 25: frame n has luma 16 + 8 (n mod 25),
+/// at 10 fps for 20 s, lossless, so a thumbnail says which frame it shows.
+fn counting_clip(dir: &Path) -> PathBuf {
+    generate(
+        dir,
+        "counting.mkv",
+        &[
+            "-f",
+            "lavfi",
+            "-i",
+            r"nullsrc=size=128x72:rate=10:duration=20,geq=lum=16+8*mod(N\,25):cb=128:cr=128",
+            "-c:v",
+            "ffv1",
+        ],
+    )
+}
+
+/// The mean brightness of the image at `file`, decoded to full-range grey.
+fn grey(file: &Path) -> f64 {
+    let output = process::command(&ffmpeg_path().unwrap())
+        .args(["-v", "error", "-i"])
+        .arg(file)
+        .args(["-f", "rawvideo", "-pix_fmt", "gray", "-"])
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "ffmpeg could not decode {file:?}");
+    output.stdout.iter().map(|&v| f64::from(v)).sum::<f64>() / output.stdout.len() as f64
+}
+
+/// The grey [`counting_clip`]'s frame `n` decodes to: its luma expanded from video range.
+fn counted(n: u32) -> f64 {
+    f64::from(8 * (n % 25)) * 255.0 / 219.0
+}
+
+#[test]
+fn a_range_strip_shows_the_frame_at_each_slice_middle_and_only_the_latest_are_kept() {
+    let clips = TempDir::new().unwrap();
+    let source = counting_clip(clips.path());
+    let (_temp, _root, previewer) = previewer();
+    previewer.open(source.clone(), info(128, 72, 20.0, "ffv1", false));
+    let whole = previewer.thumbnails(&source, None, ffmpeg_path).unwrap();
+
+    // 2.4 s from 12 s: a slice is one frame at 10 fps, and input -ss keeps the first frame at or
+    // after each slice's middle (12.05 s onwards), so thumbnail i is frame 121 + i.
+    let range = |start: f64, end: f64| Some(TimeRange { start, end });
+    let strip = previewer
+        .thumbnails(&source, range(12.0, 14.4), ffmpeg_path)
+        .unwrap();
+    assert_eq!(strip.len(), 24);
+    for (i, thumbnail) in strip.iter().enumerate() {
+        let shown = grey(thumbnail);
+        let expected = counted(121 + i as u32);
+        assert!(
+            (shown - expected).abs() < 4.0,
+            "thumbnail {i} has grey {shown:.1}, frame {} has {expected:.1}",
+            121 + i
+        );
+    }
+
+    let mut folders = vec![strip[0].parent().unwrap().to_owned()];
+    for start in [1.0, 2.0, 3.0, 4.0] {
+        let strip = previewer
+            .thumbnails(&source, range(start, start + 2.4), ffmpeg_path)
+            .unwrap();
+        folders.push(strip[0].parent().unwrap().to_owned());
+    }
+    assert!(!folders[0].exists(), "the oldest range strip is deleted");
+    assert!(folders[1..].iter().all(|folder| folder.exists()));
+    assert!(
+        whole[0].exists(),
+        "range strips never replace the whole strip"
+    );
+    let no_ffmpeg = || -> Option<PathBuf> { panic!("the whole strip is kept") };
+    assert_eq!(
+        previewer.thumbnails(&source, None, no_ffmpeg).unwrap(),
+        whole
+    );
+    assert_eq!(
+        previewer
+            .thumbnails(&source, range(0.0, 20.0), no_ffmpeg)
+            .unwrap(),
+        whole,
+        "a range covering the whole source is the whole strip"
+    );
+    assert!(matches!(
+        previewer.thumbnails(&source, range(25.0, 26.0), ffmpeg_path),
+        Err(PreviewError::InvalidRange { .. })
+    ));
+
+    previewer.close(&source);
+    assert!(folders.iter().all(|folder| !folder.exists()));
+    assert_eq!(proxies_in(&previewer), Vec::<PathBuf>::new());
+}
+
+/// Range strips on a long recording, at the depth a zoomed timeline asks for. Run it by hand with
+/// ffmpeg and ffprobe on PATH:
+///
+/// ```text
+/// VTG_LONG_CLIP="C:\long.mp4" cargo test --release range_strips_on_a_long_recording -- --ignored --nocapture
+/// ```
+#[test]
+#[ignore = "needs a long recording in VTG_LONG_CLIP; run by hand"]
+fn range_strips_on_a_long_recording() {
+    let clip = PathBuf::from(std::env::var("VTG_LONG_CLIP").expect("set VTG_LONG_CLIP"));
+    let info = crate::probe::infrastructure::ffprobe::probe(&ffprobe_path(), &clip).unwrap();
+    assert!(
+        info.duration > 30.0 * 60.0,
+        "the clip must run past 30 minutes"
+    );
+    let (_temp, _root, previewer) = previewer();
+    previewer.open(clip.clone(), info.clone());
+
+    let started = Instant::now();
+    let whole = previewer.thumbnails(&clip, None, ffmpeg_path).unwrap();
+    println!(
+        "whole {:.0} s: {:.2} s",
+        info.duration,
+        started.elapsed().as_secs_f64()
+    );
+    assert_eq!(whole.len(), 24);
+
+    // From the whole source down to the deepest zoom, 48 frames wide, at three quarters through.
+    let frame = 1.0 / info.frame_rate;
+    let middle = info.duration * 0.75;
+    let mut length = info.duration / 2.0;
+    let mut previous: Option<Vec<u8>> = None;
+    while length >= 48.0 * frame {
+        let range = TimeRange {
+            start: middle - length / 2.0,
+            end: middle + length / 2.0,
+        };
+        let started = Instant::now();
+        let strip = previewer
+            .thumbnails(&clip, Some(range), ffmpeg_path)
+            .unwrap();
+        let took = started.elapsed().as_secs_f64();
+        println!("range {length:.3} s: {took:.2} s");
+        assert_eq!(strip.len(), 24);
+        let video = &ffprobe(&strip[0])["streams"][0];
+        assert_eq!(video["height"].as_u64(), Some(72));
+        let first = std::fs::read(&strip[0]).unwrap();
+        assert_ne!(
+            previous.as_ref(),
+            Some(&first),
+            "each zoom shows other frames"
+        );
+        previous = Some(first);
+        length /= 4.0;
+    }
+    previewer.close(&clip);
+}
+
+#[test]
+fn a_strip_longer_than_90_seconds_seeks_a_keyframe_per_slice() {
+    let clips = TempDir::new().unwrap();
+    let source = generate(
+        clips.path(),
+        "two-minutes.mp4",
+        &[
+            "-f",
+            "lavfi",
+            "-i",
+            "testsrc2=size=320x180:rate=10:duration=120",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "ultrafast",
+            "-g",
+            "10",
+            "-pix_fmt",
+            "yuv420p",
+        ],
+    );
+    let (_temp, _root, previewer) = previewer();
+    previewer.open(source.clone(), info(320, 180, 120.0, "h264", false));
+
+    let thumbnails = previewer.thumbnails(&source, None, ffmpeg_path).unwrap();
+    assert_eq!(thumbnails.len(), 24);
+    for thumbnail in &thumbnails {
+        let video = &ffprobe(thumbnail)["streams"][0];
+        assert_eq!(
+            (video["width"].as_u64(), video["height"].as_u64()),
+            (Some(128), Some(72))
+        );
+    }
+    assert_ne!(
+        std::fs::read(&thumbnails[0]).unwrap(),
+        std::fs::read(&thumbnails[23]).unwrap()
+    );
 }

@@ -23,6 +23,7 @@ export type PreviewError =
   | { kind: 'ffmpegMissing' }
   | { kind: 'proxyFailed'; reason: string }
   | { kind: 'thumbnailsFailed'; reason: string }
+  | { kind: 'invalidRange'; reason: string }
   | { kind: 'cancelled' };
 
 /**
@@ -53,15 +54,23 @@ export function makeProxy(path: string): Promise<string> {
   return invoke<string>('make_proxy', { path });
 }
 
-/** Thumbnails in the trim timeline's strip; Rust's `THUMBNAIL_COUNT`. */
+/** Thumbnails in a strip, whether it covers the whole source or a range; Rust's `THUMBNAIL_COUNT`. */
 export const timelineThumbnailCount = 24;
 
+/** A span of the source's timeline, in seconds; Rust's `TimeRange`. */
+export type TimeRange = { start: number; end: number };
+
 /**
- * Resolves to the paths of the open source's timeline thumbnails, in time order, made by ffmpeg
- * from the preview source. Rejects with a PreviewError.
+ * Resolves to the paths of the open source's timeline thumbnails in time order, made by ffmpeg
+ * from the preview source: the whole source's strip, kept once made, or with `range` a new strip
+ * of just that span, which a zoomed timeline asks for. Rejects with a PreviewError, `invalidRange`
+ * for a range outside the source.
  */
-export function makeThumbnails(path: string): Promise<string[]> {
-  return invoke<string[]>('make_thumbnails', { path });
+export function makeThumbnails(
+  path: string,
+  range?: TimeRange
+): Promise<string[]> {
+  return invoke<string[]>('make_thumbnails', { path, range: range ?? null });
 }
 
 export function onProxyProgress(
