@@ -143,7 +143,7 @@ test('falls back to a proxy when the player cannot decode the source, keeping th
   });
   await renderWithListeners(<Editor ffmpeg={ffmpegFound} />);
   await drop('C:\\videos\\high10.mp4');
-  const end = screen.getByRole('textbox', { name: 'End' });
+  const end = screen.getByRole('textbox', { name: 'Out' });
   fireEvent.change(end, { target: { value: '0:05' } });
   fireEvent.blur(end);
 

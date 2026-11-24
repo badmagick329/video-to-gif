@@ -9,17 +9,10 @@ import {
 } from 'react';
 import { ClipCrop, ClipTrim } from './lib/types';
 import type { Size } from './lib/output-preview';
-import {
-  formatClipTime,
-  parseClipTime,
-  setSelectionEnd,
-  setSelectionStart,
-  toClipTrim,
-} from './lib/trim';
-import { useTimelineThumbnails } from './useTimelineThumbnails';
+import { setSelectionEnd, setSelectionStart, toClipTrim } from './lib/trim';
 import { useClipShortcuts } from './useClipShortcuts';
 import ClipTransport from './ClipTransport';
-import TrimTimeline from './TrimTimeline';
+import TimelineDock from './TimelineDock';
 import VideoCropper, { CropControls, cropSize } from './VideoCropper';
 import {
   PaneLabel,
@@ -56,9 +49,6 @@ function keepInSelection(player: HTMLVideoElement, playback: Playback) {
     player.currentTime = playback.end;
   }
 }
-
-const button =
-  'inline-flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-2 text-md text-fg-soft hover:bg-hover hover:text-fg disabled:cursor-not-allowed disabled:opacity-50';
 
 /**
  * What the trimmer needs to know about the source. It comes from the probe,
@@ -155,7 +145,6 @@ export default function VideoTrimmer({
   useEffect(() => {
     playback.current = { start, end, loop: loopSelection };
   });
-  const thumbnails = useTimelineThumbnails(source.path, src);
 
   // Loading a source resets the rate to the default, so set both.
   useEffect(() => {
@@ -178,7 +167,6 @@ export default function VideoTrimmer({
   }, [playing]);
 
   const selection = { start, end };
-  const length = end - start;
   const change = (next: { start: number; end: number } | undefined) =>
     onChange(next && toClipTrim(next, total));
   const seek = (seconds: number) => {
@@ -364,110 +352,32 @@ export default function VideoTrimmer({
           />
         </fieldset>
       </section>
-      <section
-        aria-label='Timeline'
-        className='flex h-[180px] shrink-0 flex-col border-t border-line bg-dock'
-      >
-        <fieldset disabled={disabled} className='flex min-w-0 flex-col'>
-          <legend className='sr-only'>Selection</legend>
-          <div className='flex h-[38px] items-center gap-2 overflow-hidden px-3'>
-            <span className='shrink-0 text-sm font-semibold'>Selection</span>
-            <TimeField label='Start' seconds={start} onCommit={commitStart} />
-            <TimeField label='End' seconds={end} onCommit={commitEnd} />
-            <p className='shrink-0 whitespace-nowrap text-sm text-dim'>
-              Length{' '}
-              <span className='font-mono text-base tabular-nums text-fg'>
-                {length.toFixed(2)} s
-              </span>
-            </p>
-            <span className='flex-1' />
-            <button
-              type='button'
-              className={button}
-              onClick={() => commitStart(currentTime)}
-            >
-              Set start <span aria-hidden className='kbd'>I</span>
-            </button>
-            <button
-              type='button'
-              className={button}
-              onClick={() => commitEnd(currentTime)}
-            >
-              Set end <span aria-hidden className='kbd'>O</span>
-            </button>
-            <button
-              type='button'
-              className={button}
-              disabled={!trim}
-              onClick={() => change(undefined)}
-            >
-              Whole clip
-            </button>
-          </div>
-          <TrimTimeline
-            total={total}
-            selection={selection}
-            currentTime={currentTime}
-            frameSeconds={frameSeconds}
-            thumbnails={thumbnails}
-            disabled={disabled}
-            onSelectionChange={change}
-            onSeek={seek}
-            onScrubChange={(scrubbing) => {
-              if (scrubbing) {
-                resumeAfterScrub.current = playing;
-                video.current!.pause();
-              } else if (resumeAfterScrub.current) {
-                resumeAfterScrub.current = false;
-                void play();
-              }
-            }}
-          />
-          {playError && (
-            <p role='alert' className='px-4 pt-2 text-sm text-danger'>
-              {playError}
-            </p>
-          )}
-        </fieldset>
-      </section>
-    </div>
-  );
-}
-
-/** Holds a draft while typing so partial input is never clamped mid-edit. */
-function TimeField({
-  label,
-  seconds,
-  onCommit,
-}: {
-  label: string;
-  seconds: number;
-  onCommit: (seconds: number) => void;
-}) {
-  const [draft, setDraft] = useState<string | null>(null);
-  const commit = () => {
-    if (draft === null) return;
-    const parsed = parseClipTime(draft);
-    setDraft(null);
-    if (parsed !== null) onCommit(parsed);
-  };
-  return (
-    <label className='inline-flex h-[26px] shrink-0 items-center gap-1.5 rounded-[5px] border border-line-control bg-canvas pl-2 text-xs uppercase text-dim focus-within:border-accent'>
-      {label}
-      <input
-        type='text'
-        inputMode='decimal'
-        spellCheck={false}
-        autoComplete='off'
-        className='h-full w-[5.5rem] bg-transparent pr-2 font-mono text-base normal-case text-fg focus:outline-none'
-        value={draft ?? formatClipTime(seconds)}
-        onChange={(event) => setDraft(event.target.value)}
-        onBlur={commit}
-        onKeyDown={(event) => {
-          if (event.key === 'Enter') commit();
-          if (event.key === 'Escape') setDraft(null);
+      <TimelineDock
+        path={source.path}
+        src={src}
+        total={total}
+        frameSeconds={frameSeconds}
+        selection={selection}
+        trimmed={trim !== undefined}
+        currentTime={currentTime}
+        disabled={disabled}
+        playError={playError}
+        onSelectionChange={change}
+        onSeek={seek}
+        onScrubChange={(scrubbing) => {
+          if (scrubbing) {
+            resumeAfterScrub.current = playing;
+            video.current!.pause();
+          } else if (resumeAfterScrub.current) {
+            resumeAfterScrub.current = false;
+            void play();
+          }
         }}
+        onCommitIn={commitStart}
+        onCommitOut={commitEnd}
+        onSetIn={() => commitStart(currentTime)}
+        onSetOut={() => commitEnd(currentTime)}
       />
-    </label>
+    </div>
   );
 }

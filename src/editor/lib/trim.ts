@@ -24,6 +24,17 @@ const clamp = (value: number, min: number, max: number) =>
 
 type Selection = { start: number; end: number };
 
+/**
+ * The frame boundary nearest `seconds`. Pointer edits on the timeline land on frames, so a handle
+ * placed with the mouse sits exactly where a frame starts, which is the frame the player shows
+ * there and the one export keeps (*Trim* in the architecture doc).
+ */
+export function snapToFrame(seconds: number, frameSeconds: number) {
+  // Dividing by the rate gives k / rate correctly rounded, where k × frameSeconds drifts off it.
+  const rate = 1 / frameSeconds;
+  return Math.round(seconds * rate) / rate;
+}
+
 /** One frame, or the whole clip when the clip is shorter than a frame. */
 export function shortestSelection(total: number, frameSeconds: number) {
   return Math.min(frameSeconds, total);

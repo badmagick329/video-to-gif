@@ -81,7 +81,7 @@ function Harness({
 const trimText = () => screen.getByTestId('trim').textContent!;
 const trimValues = () => trimText().split('-').map(Number) as [number, number];
 const player = (container: HTMLElement) => container.querySelector('video')!;
-const type = (label: 'Start' | 'End', value: string) => {
+const type = (label: 'In' | 'Out', value: string) => {
   const field = screen.getByLabelText(label);
   fireEvent.change(field, { target: { value } });
   fireEvent.keyDown(field, { key: 'Enter' });
@@ -102,27 +102,27 @@ const drag = (target: Element, fromX: number, toX: number) => {
   fireEvent.pointerUp(target, { clientX: toX, pointerId: 1 });
 };
 
-test('Whole clip clears the selection', () => {
+test('Whole video clears the selection', () => {
   render(<Harness />);
-  expect(screen.getByText('Whole clip')).toBeDisabled();
-  type('Start', '0:20');
+  expect(screen.getByText('Whole video')).toBeDisabled();
+  type('In', '0:20');
   expect(trimText()).toBe('20-60');
   expect(screen.getByText('40.00 s')).toBeInTheDocument();
-  fireEvent.click(screen.getByText('Whole clip'));
+  fireEvent.click(screen.getByText('Whole video'));
   expect(trimText()).toBe('whole');
 });
 
 test('typed times accept m:ss.cc or seconds, ignore invalid input and seek to the edge', () => {
   const { container } = render(<Harness />);
-  expect(screen.getByLabelText('Start')).toHaveValue('0:00.00');
-  expect(screen.getByLabelText('End')).toHaveValue('1:00.00');
-  type('Start', '0:12.50');
-  type('End', '15.25');
+  expect(screen.getByLabelText('In')).toHaveValue('0:00.00');
+  expect(screen.getByLabelText('Out')).toHaveValue('1:00.00');
+  type('In', '0:12.50');
+  type('Out', '15.25');
   expect(trimText()).toBe('12.5-15.25');
   expect(player(container).currentTime).toBe(15.25);
-  expect(screen.getByLabelText('End')).toHaveValue('0:15.25');
+  expect(screen.getByLabelText('Out')).toHaveValue('0:15.25');
   expect(screen.getByText('2.75 s')).toBeInTheDocument();
-  const start = type('Start', 'soon');
+  const start = type('In', 'soon');
   expect(start).toHaveValue('0:12.50');
   expect(trimText()).toBe('12.5-15.25');
   fireEvent.change(start, { target: { value: '0:14' } });
@@ -133,28 +133,28 @@ test('typed times accept m:ss.cc or seconds, ignore invalid input and seek to th
 
 test('typed times are clamped inside the clip with the start at least one frame before the end', () => {
   render(<Harness initialTrim={{ start: 10, end: 20 }} />);
-  type('Start', '0:30');
+  type('In', '0:30');
   let [start, end] = trimValues();
   expect(end).toBe(20);
   expect(start).toBeCloseTo(20 - frame);
-  type('End', '0:05');
+  type('Out', '0:05');
   [start, end] = trimValues();
   expect(end - start).toBeCloseTo(frame);
-  type('End', '2:00');
+  type('Out', '2:00');
   expect(trimValues()[1]).toBe(60);
-  type('Start', '0');
+  type('In', '0');
   expect(trimText()).toBe('whole');
 });
 
-test('Set start and Set end use the playhead, clamped the same way', () => {
+test('Set in and Set out use the playhead, clamped the same way', () => {
   const { container } = render(<Harness />);
   const timeline = strip();
   fireEvent.pointerDown(timeline, { clientX: 300, button: 0 });
   fireEvent.pointerUp(timeline, { clientX: 300 });
   expect(player(container).currentTime).toBe(30);
-  fireEvent.click(screen.getByText('Set end'));
+  fireEvent.click(screen.getByText('Set out'));
   expect(trimText()).toBe('0-30');
-  fireEvent.click(screen.getByText('Set start'));
+  fireEvent.click(screen.getByText('Set in'));
   const [start, end] = trimValues();
   expect(end).toBe(30);
   expect(start).toBeCloseTo(30 - frame);
@@ -162,8 +162,8 @@ test('Set start and Set end use the playhead, clamped the same way', () => {
 
 test('handles nudge by a frame, or a second with Shift, and never cross', () => {
   render(<Harness initialTrim={{ start: 10, end: 20 }} />);
-  const start = screen.getByRole('slider', { name: 'Selection start' });
-  const end = screen.getByRole('slider', { name: 'Selection end' });
+  const start = screen.getByRole('slider', { name: 'In point' });
+  const end = screen.getByRole('slider', { name: 'Out point' });
   expect(start).toHaveAttribute('tabindex', '0');
   fireEvent.keyDown(start, { key: 'ArrowRight' });
   expect(trimValues()[0]).toBeCloseTo(10 + frame);
@@ -185,8 +185,8 @@ test('dragging the handles and the span edits the selection inside the clip', ()
     <Harness initialTrim={{ start: 10, end: 20 }} />
   );
   strip();
-  const start = screen.getByRole('slider', { name: 'Selection start' });
-  const end = screen.getByRole('slider', { name: 'Selection end' });
+  const start = screen.getByRole('slider', { name: 'In point' });
+  const end = screen.getByRole('slider', { name: 'Out point' });
   const span = container.querySelector('[data-part="span"]')!;
   drag(start, 100, 50);
   expect(trimText()).toBe('5-20');
@@ -275,11 +275,11 @@ test('a preview the player cannot decode is reported, for the editor to make a p
 
 test('trim controls cannot change a queued conversion', () => {
   render(<Harness initialTrim={{ start: 10, end: 20 }} disabled />);
-  expect(screen.getByLabelText('Start')).toBeDisabled();
-  expect(screen.getByLabelText('End')).toBeDisabled();
+  expect(screen.getByLabelText('In')).toBeDisabled();
+  expect(screen.getByLabelText('Out')).toBeDisabled();
   expect(screen.getByRole('button', { name: 'Play' })).toBeDisabled();
-  expect(screen.getByText('Set start')).toBeDisabled();
-  const start = screen.getByRole('slider', { name: 'Selection start' });
+  expect(screen.getByText('Set in')).toBeDisabled();
+  const start = screen.getByRole('slider', { name: 'In point' });
   expect(start).toHaveAttribute('tabindex', '-1');
   fireEvent.keyDown(start, { key: 'ArrowRight' });
   drag(start, 100, 300);
@@ -305,5 +305,5 @@ test('the timeline shows ffmpeg-made thumbnails, or a plain bar when they fail',
   render(<Harness />);
   await act(async () => {});
   expect(screen.queryByTestId('timeline-thumbnails')).not.toBeInTheDocument();
-  expect(screen.getByLabelText('Start')).toBeEnabled();
+  expect(screen.getByLabelText('In')).toBeEnabled();
 });

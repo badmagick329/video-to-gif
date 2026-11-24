@@ -64,9 +64,9 @@ const press = (
   target: Element = document.body
 ) => fireEvent.keyDown(target, { key, ...options });
 const startField = (index = 0) =>
-  screen.getAllByLabelText('Start')[index] as HTMLInputElement;
+  screen.getAllByLabelText('In')[index] as HTMLInputElement;
 const endField = (index = 0) =>
-  screen.getAllByLabelText('End')[index] as HTMLInputElement;
+  screen.getAllByLabelText('Out')[index] as HTMLInputElement;
 
 test('each shortcut drives the clip editor', async () => {
   const [video] = await loadClip();
