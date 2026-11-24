@@ -1,14 +1,21 @@
 //! The export slice's Tauri commands, its `export-progress` and `export-output` events, and its
 //! part in the app's startup and exit.
+//!
+//! Each finished output is added to the asset protocol's scope as it is made, so the results list
+//! can play it, and to [`SessionOutputs`], so Open and Show in folder accept it. Nothing else the
+//! export touches becomes readable.
 
-use std::path::PathBuf;
+use std::error::Error;
+use std::path::{Path, PathBuf};
 
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Emitter, Manager, State};
 
+use crate::export::application::session_outputs::SessionOutputs;
 use crate::export::application::{self, Environment, Exports};
 use crate::export::domain::memory::MemoryEstimate;
-use crate::export::domain::outcome::{ExportError, ExportOutput};
+use crate::export::domain::outcome::{DestinationError, ExportError, ExportOutput, OutputError};
 use crate::export::domain::plan::{ExportRequest, MemoryRequest};
+use crate::export::infrastructure::destination::{self, SavedDestination};
 use crate::export::infrastructure::memory;
 use crate::search_path::SearchPath;
 use crate::temp_folder::{self, TempFolder};
@@ -19,9 +26,13 @@ pub const EXPORT_PROGRESS_EVENT: &str = "export-progress";
 /// them.
 pub const EXPORT_OUTPUT_EVENT: &str = "export-output";
 
-/// Puts the export state in Tauri's state. Called from the app's setup.
-pub fn set_up(app: &tauri::App) {
+/// Puts the export state, the session's outputs and the remembered destination in Tauri's state.
+/// Called from the app's setup.
+pub fn set_up(app: &tauri::App) -> Result<(), Box<dyn Error>> {
     app.manage(Exports::default());
+    app.manage(SessionOutputs::default());
+    app.manage(SavedDestination::in_dir(&app.path().app_config_dir()?));
+    Ok(())
 }
 
 /// Cancels a running export and waits for it to delete its partial file. Called when the app
@@ -80,6 +91,12 @@ pub async fn run_export(
                 let _ = app.emit(EXPORT_PROGRESS_EVENT, progress);
             },
             |output| {
+                if let ExportOutput::Done { path, .. } = output {
+                    let path = Path::new(path);
+                    app.state::<SessionOutputs>().record(path);
+                    // Without it the list shows a broken thumbnail; Open still works.
+                    let _ = app.asset_protocol_scope().allow_file(path);
+                }
                 let _ = app.emit(EXPORT_OUTPUT_EVENT, output);
             },
         )
@@ -102,4 +119,66 @@ pub fn cancel_export(app: AppHandle) {
 pub fn estimate_export_memory(request: MemoryRequest) -> Result<MemoryEstimate, ExportError> {
     let selection = request.validate()?;
     Ok(MemoryEstimate::new(&selection, memory::available_bytes()))
+}
+
+/// The folder chosen with Save to on this or an earlier launch, when it still exists; `None`
+/// means the editor saves beside the source.
+#[tauri::command]
+pub fn saved_destination(saved: State<'_, SavedDestination>) -> Option<String> {
+    saved.load().map(|folder| folder.display().to_string())
+}
+
+/// Remembers `folder` as the destination for this and later launches, or forgets the choice with
+/// `None` so outputs go beside the source again.
+#[tauri::command]
+pub fn remember_destination(
+    saved: State<'_, SavedDestination>,
+    folder: Option<String>,
+) -> Result<(), DestinationError> {
+    // Trust boundary: the folder comes from the frontend; hold it to what run_export accepts.
+    let folder = folder.map(PathBuf::from);
+    if let Some(folder) = &folder
+        && !destination::is_folder(folder)
+    {
+        return Err(DestinationError::NotFound {
+            path: folder.display().to_string(),
+        });
+    }
+    saved
+        .save(folder.as_deref())
+        .map_err(|err| DestinationError::NotSaved {
+            reason: err.to_string(),
+        })
+}
+
+/// Opens an output this session made in the app Windows associates with its type.
+#[tauri::command]
+pub async fn open_output(
+    outputs: State<'_, SessionOutputs>,
+    path: String,
+) -> Result<(), OutputError> {
+    let path = outputs.check(&path)?;
+    shell(move || tauri_plugin_opener::open_path(path, None::<&str>)).await
+}
+
+/// Opens the folder holding an output this session made, in Explorer, with the file selected.
+#[tauri::command]
+pub async fn show_output_in_folder(
+    outputs: State<'_, SessionOutputs>,
+    path: String,
+) -> Result<(), OutputError> {
+    let path = outputs.check(&path)?;
+    shell(move || tauri_plugin_opener::reveal_item_in_dir(path)).await
+}
+
+/// Runs a shell call off the async runtime's workers: it initialises COM and may wait on Explorer.
+async fn shell(
+    call: impl FnOnce() -> Result<(), tauri_plugin_opener::Error> + Send + 'static,
+) -> Result<(), OutputError> {
+    tauri::async_runtime::spawn_blocking(call)
+        .await
+        .expect("shell task panicked")
+        .map_err(|err| OutputError::ShellFailed {
+            reason: err.to_string(),
+        })
 }

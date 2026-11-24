@@ -33,6 +33,9 @@ pub enum ExportOutput {
         path: String,
         /// Bytes.
         size: u64,
+        /// The encoded frame size in pixels, the same for every output of a run.
+        width: u32,
+        height: u32,
     },
     /// ffmpeg failed, or the finished file could not be put in place. `reason` is the tail of
     /// ffmpeg's error output, or the filesystem's error. Nothing was left in the folder.
@@ -94,3 +97,34 @@ impl fmt::Display for ExportError {
 }
 
 impl std::error::Error for ExportError {}
+
+/// Why Open or Show in folder refused a path. Serialized with a `kind` tag.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
+pub enum OutputError {
+    /// Not an output this session made. Open and Show in folder act only on those, so the webview
+    /// cannot ask the shell to open an arbitrary path.
+    NotAnOutput { path: String },
+    /// This session made it, but it has since been moved or deleted.
+    Missing { path: String },
+    /// The shell refused to open or show it.
+    ShellFailed { reason: String },
+}
+
+/// Why a folder could not be remembered as the destination. Serialized with a `kind` tag.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
+pub enum DestinationError {
+    /// Not an absolute path to an existing folder.
+    NotFound { path: String },
+    /// The choice could not be written to the app's config folder.
+    NotSaved { reason: String },
+}

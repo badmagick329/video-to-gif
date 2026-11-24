@@ -19,7 +19,12 @@ export function renderAdvancedEditor({
   /** The player's decoded frame: the proxy's size when it plays one. */
   frame?: { width: number; height: number };
 }) {
-  const onExport = vi.fn(async (request: ExportRequest) => void request);
+  const onExport = vi.fn(
+    async (request: ExportRequest, destination: string) => {
+      void request;
+      return { text: `Saved to ${destination}.`, failed: false };
+    }
+  );
   const path = 'C:/videos/clip.mp4';
   function Harness() {
     const [trim, setTrim] = useState<ClipTrim>();
@@ -46,7 +51,15 @@ export function renderAdvancedEditor({
         onCropChange={setCrop}
         onRemove={() => {}}
         onUnplayable={() => {}}
+        job={null}
+        saveTo={{
+          destination: { folder: 'C:/videos', from: 'source' },
+          error: '',
+          choose: async () => {},
+          saveBesideSource: async () => {},
+        }}
         onExport={onExport}
+        onCancel={() => {}}
       />
     );
   }

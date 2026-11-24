@@ -19,6 +19,9 @@ serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 tauri = { version = "2.12.7", features = ["protocol-asset"] }
 tauri-plugin-dialog = "2.8.4"
+# Called from Rust only (Open, Show in folder) after checking the path is this session's output;
+# the plugin is not registered, so the webview gets none of its commands.
+tauri-plugin-opener = "2.7.3"
 
 # Windows APIs std does not wrap: free physical memory for the export's frame-memory guard, and a
 # rename that refuses to replace an existing output. Already in the tree through Tauri.

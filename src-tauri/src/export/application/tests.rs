@@ -403,8 +403,19 @@ fn one_run_makes_every_ticked_file_type_in_order() {
         );
         assert!(!probed.audio, "{file_type:?} has no sound unless asked");
         match &run.outputs[file_type as usize] {
-            ExportOutput::Done { path, size, .. } => {
-                assert_eq!(fs::metadata(path).unwrap().len(), *size)
+            ExportOutput::Done {
+                path,
+                size,
+                width,
+                height,
+                ..
+            } => {
+                assert_eq!(fs::metadata(path).unwrap().len(), *size);
+                // The reported size is the encoded one, which the UI shows beside the output.
+                assert_eq!(
+                    (u64::from(*width), u64::from(*height)),
+                    (probed.width, probed.height)
+                );
             }
             other => panic!("{other:?}"),
         }

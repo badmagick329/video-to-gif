@@ -9,9 +9,12 @@ import type { SourceInfo } from '../../ipc/probe';
 type Args = Record<string, unknown>;
 type Handler = (args: Args) => Promise<unknown>;
 
+type Listener = (event: { payload: unknown }) => void;
+
 export const tauri = {
-  drop: null as null | ((event: { payload: unknown }) => void),
-  progress: null as null | ((event: { payload: unknown }) => void),
+  drop: null as null | Listener,
+  /** The latest handler listening for each event name. */
+  listeners: {} as Record<string, Listener>,
   commands: {} as Record<string, Handler>,
 };
 
@@ -25,11 +28,20 @@ export const core = {
 };
 
 export const event = {
-  listen: vi.fn(async (_name: string, handler: typeof tauri.progress) => {
-    tauri.progress = handler;
-    return () => {};
+  listen: vi.fn(async (name: string, handler: Listener) => {
+    tauri.listeners[name] = handler;
+    return () => {
+      if (tauri.listeners[name] === handler) delete tauri.listeners[name];
+    };
   }),
 };
+
+/** Delivers an event to its listener, as Rust's emit would. */
+export async function emit(name: string, payload: unknown) {
+  const listener = tauri.listeners[name];
+  if (!listener) throw new Error(`nothing listens for ${name}`);
+  await act(async () => listener({ payload }));
+}
 
 export const webview = {
   getCurrentWebview: () => ({
@@ -51,7 +63,7 @@ export function resetTauri() {
   core.invoke.mockClear();
   dialog.open.mockReset();
   tauri.drop = null;
-  tauri.progress = null;
+  tauri.listeners = {};
   tauri.commands = {};
 }
 
@@ -71,9 +83,7 @@ export async function drop(path: string) {
 }
 
 export async function progress(source: string, value: number) {
-  await act(async () => {
-    tauri.progress!({ payload: { source, progress: value } });
-  });
+  await emit('proxy-progress', { source, progress: value });
 }
 
 export const sourceInfo = (patch: Partial<SourceInfo> = {}): SourceInfo => ({
@@ -102,8 +112,18 @@ export function clipBackend(
     open_source: async () => preview,
     make_proxy: async () => proxyPath,
     make_thumbnails: () => new Promise(() => {}),
+    saved_destination: async () => null,
+    estimate_export_memory: async () => memoryFits,
   });
 }
+
+/** An export that holds no frames, as forward WebP and MP4 do. */
+export const memoryFits = {
+  heldBytes: 0,
+  availableBytes: 8 * 1024 ** 3,
+  limitSeconds: null,
+  fits: true,
+};
 
 /**
  * Drops `path` on the window and gives the player a decoded frame of `frame` pixels, which is

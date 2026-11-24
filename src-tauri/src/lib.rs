@@ -18,7 +18,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
-            export::presentation::set_up(app);
+            export::presentation::set_up(app)?;
             preview::presentation::set_up(app)
         })
         // Register slice commands here, and only here, as they are written.
@@ -32,6 +32,10 @@ pub fn run() {
             export::presentation::run_export,
             export::presentation::cancel_export,
             export::presentation::estimate_export_memory,
+            export::presentation::saved_destination,
+            export::presentation::remember_destination,
+            export::presentation::open_output,
+            export::presentation::show_output_in_folder,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

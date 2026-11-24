@@ -1,12 +1,11 @@
-// Copied from mgck's __tests__/discordgifs-advanced-mode.test.tsx (the editor's controls), the
-// settings-number tests of discordgifs-advanced-commands.test.ts and the Made this session test
-// of discordgifs-output.test.tsx. Dropped with what they covered: the large-file warning and
-// frame-memory limits (ffmpeg.wasm's), the mode switch (simple mode is not in v0), and the
-// ffmpeg command tests (export builds commands in Rust).
-import { act, fireEvent, render, screen, within } from '@testing-library/react';
+// Copied from mgck's __tests__/discordgifs-advanced-mode.test.tsx (the editor's controls) and the
+// settings-number tests of discordgifs-advanced-commands.test.ts. Dropped with what they covered:
+// the large-file warning and frame-memory limits (ffmpeg.wasm's), the mode switch (simple mode is
+// not in v0), and the ffmpeg command tests (export builds commands in Rust). Converting, its
+// progress and Made this session are tested in export.test.tsx.
+import { act, fireEvent, screen, within } from '@testing-library/react';
 
 import Editor from '../Editor';
-import SessionResults from '../SessionResults';
 import {
   AdvancedSettings,
   croppedSourceSize,
@@ -79,7 +78,7 @@ describe('Advanced mode', () => {
     expect(screen.getAllByRole('button', { name: /^Remove / })).toHaveLength(1);
   });
 
-  test('converts the ticked file types, with Made this session empty until export exists', async () => {
+  test('converts the ticked file types, with Made this session empty until something is made', async () => {
     const { request } = renderAdvancedEditor({ info: sourceInfo() });
     const results = screen.getByRole('region', { name: 'Made this session' });
     expect(within(results).getByText(/Nothing yet/)).toBeInTheDocument();
@@ -91,13 +90,6 @@ describe('Advanced mode', () => {
       info: sourceInfo(),
       settings: { fileTypes: ['gif', 'mp4'], fps: 15 },
     });
-  });
-
-  test('the app’s Convert stops before exporting and says so', async () => {
-    await openEditor();
-    expect(convertButton()).toHaveTextContent('Convert to GIF');
-    await convert();
-    expect(screen.getByRole('status')).toHaveTextContent('Converting is not built yet.');
   });
 
   test('no file type ticked leaves nothing to convert', async () => {
@@ -371,23 +363,5 @@ describe('Advanced mode output numbers', () => {
     expect(frameCount(2.2, 15)).toBe(33);
     expect(isLargeGif({ width: 480, height: 270 }, 300)).toBe(false);
     expect(isLargeGif({ width: 480, height: 270 }, 301)).toBe(true);
-  });
-});
-
-describe('Made this session', () => {
-  test('shows why a file type failed beside the failure', () => {
-    render(
-      <SessionResults
-        results={[
-          { id: 'a', fileType: 'gif', failed: true, reason: 'This video is AV1.' },
-          { id: 'b', fileType: 'webp', failed: true },
-        ]}
-      />
-    );
-    const rows = screen.getAllByRole('listitem');
-    expect(rows.map((row) => row.textContent)).toEqual([
-      'GIF conversion failedThis video is AV1.',
-      'WebP conversion failed',
-    ]);
   });
 });

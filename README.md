@@ -4,7 +4,7 @@ A Windows desktop app that turns a video into a GIF, WebP or MP4. It reproduces 
 
 The browser version runs ffmpeg as WebAssembly and fails on AV1, HEVC and MKV files and on multi-GB recordings. This app runs your own ffmpeg instead, so it opens anything your ffmpeg can read, at any size, straight from where the file sits on disk.
 
-It is early work. The app is being built now and does not convert anything yet.
+It is early work. It converts, saving next to the video or in a folder you pick, and lists each file it made with buttons to open it or show it in Explorer.
 
 ## Requirements
 

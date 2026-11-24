@@ -11,9 +11,24 @@ export type ClipTrim = { start: number; end: number };
  */
 export type ClipCrop = { x: number; y: number; width: number; height: number };
 
-/** One file an export made, kept for the rest of the session. */
+/**
+ * One output an export made, or one file type that failed, kept for the rest of the session.
+ * `path` is what Rust reported; Open and Show in folder send it back unchanged, since Rust accepts
+ * only paths it produced.
+ */
 export type SessionResult =
-  | { id: string; fileType: FileType; name: string; url: string; size: number }
+  | {
+      id: string;
+      fileType: FileType;
+      path: string;
+      name: string;
+      /** The asset-protocol URL the list plays it from. */
+      url: string;
+      size: number;
+      width: number;
+      height: number;
+    }
+  /** `reason` is the tail of ffmpeg's error output, or the filesystem's error. */
   | { id: string; fileType: FileType; failed: true; reason?: string };
 
 /**

@@ -5,6 +5,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import Editor from '../Editor';
 import {
   clipBackend,
+  core,
   dialog,
   drop,
   resetTauri,
@@ -53,7 +54,8 @@ async function loadClip(): Promise<[HTMLVideoElement]> {
   );
   return [container.querySelector('video')!];
 }
-const convertMessage = () => screen.queryByText('Converting is not built yet.');
+/** Whether Convert reached Rust's run_export. */
+const exported = () => core.invoke.mock.calls.some(([command]) => command === 'run_export');
 
 const press = (
   key: string,
@@ -100,7 +102,7 @@ test('each shortcut drives the clip editor', async () => {
   expect(video.currentTime).toBe(14);
 
   press('Enter', { ctrlKey: true });
-  await waitFor(() => expect(convertMessage()).toBeInTheDocument());
+  await waitFor(() => expect(exported()).toBe(true));
 
   press('o', { ctrlKey: true });
   expect(dialog.open).toHaveBeenCalledTimes(1);
@@ -123,7 +125,7 @@ test('nothing fires while typing in a field, and focused sliders keep their keys
   expect(played).toEqual([]);
   expect(video.currentTime).toBe(10);
   expect(field.value).toBe('0:00.00');
-  expect(convertMessage()).toBeNull();
+  expect(exported()).toBe(false);
   expect(dialog.open).not.toHaveBeenCalled();
 
   // Home on the playhead slider goes to the clip's start, not the selection's.
@@ -165,7 +167,7 @@ test('keys pressed outside the editor leave the clip alone', async () => {
   expect(played).toEqual([]);
   expect(startField().value).toBe('0:00.00');
   await act(async () => {});
-  expect(convertMessage()).toBeNull();
+  expect(exported()).toBe(false);
 
   // Opening a file is page-wide.
   press('O', { ctrlKey: true }, preset);

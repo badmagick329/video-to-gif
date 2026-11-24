@@ -260,5 +260,7 @@ export function isLargeGif(size: Size, frames: number): boolean {
 
 export function formatBytes(bytes: number): string {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KiB`;
-  return `${(bytes / 1024 / 1024).toFixed(1)} MiB`;
+  if (bytes < 1024 ** 3) return `${(bytes / 1024 / 1024).toFixed(1)} MiB`;
+  // Memory figures for the frame-memory guard run to gigabytes.
+  return `${(bytes / 1024 ** 3).toFixed(1)} GiB`;
 }

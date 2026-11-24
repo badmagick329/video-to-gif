@@ -10,7 +10,16 @@ import type { SourceInfo } from './probe';
 
 /** One ticked file type's result. Failed and cancelled outputs leave no file behind. */
 export type ExportOutput =
-  | { status: 'done'; fileType: FileType; path: string; size: number }
+  | {
+      status: 'done';
+      fileType: FileType;
+      path: string;
+      /** Bytes. */
+      size: number;
+      /** The encoded frame size in pixels. */
+      width: number;
+      height: number;
+    }
   | { status: 'failed'; fileType: FileType; reason: string }
   | { status: 'cancelled'; fileType: FileType };
 
@@ -93,5 +102,47 @@ export function onExportOutput(
 }
 
 export function isExportError(error: unknown): error is ExportError {
+  return typeof error === 'object' && error !== null && 'kind' in error;
+}
+
+export type OutputError =
+  | { kind: 'notAnOutput'; path: string }
+  | { kind: 'missing'; path: string }
+  | { kind: 'shellFailed'; reason: string };
+
+export type DestinationError =
+  | { kind: 'notFound'; path: string }
+  | { kind: 'notSaved'; reason: string };
+
+/**
+ * Opens an output in its default app. Rejects with an OutputError for a path this session did
+ * not produce or that has since gone.
+ */
+export function openOutput(path: string): Promise<void> {
+  return invoke<void>('open_output', { path });
+}
+
+/** Opens Explorer on the output's folder with the output selected; rejects like openOutput. */
+export function showOutputInFolder(path: string): Promise<void> {
+  return invoke<void>('show_output_in_folder', { path });
+}
+
+/**
+ * The folder picked with Save to on this or an earlier launch, or null when none was picked or
+ * it no longer exists (outputs then go beside the source).
+ */
+export function savedDestination(): Promise<string | null> {
+  return invoke<string | null>('saved_destination');
+}
+
+/**
+ * Remembers `folder` as the destination across launches, or forgets it with null. Rejects with a
+ * DestinationError.
+ */
+export function rememberDestination(folder: string | null): Promise<void> {
+  return invoke<void>('remember_destination', { folder });
+}
+
+export function isOutputError(error: unknown): error is OutputError {
   return typeof error === 'object' && error !== null && 'kind' in error;
 }

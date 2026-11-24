@@ -253,6 +253,8 @@ fn make_output(
                     file_type,
                     path: path.display().to_string(),
                     size,
+                    width: plan.selection.size.width,
+                    height: plan.selection.size.height,
                 }
             }
             Err(err) => {
@@ -284,6 +286,8 @@ fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
     // The guarded state stays consistent across a panic in a callback, so carry on with it.
     mutex.lock().unwrap_or_else(|poison| poison.into_inner())
 }
+
+pub mod session_outputs;
 
 #[cfg(test)]
 mod tests;

@@ -3,6 +3,8 @@ import { useCallback, useState } from 'react';
 
 import AdvancedEditor from './AdvancedEditor';
 import SessionResults from './SessionResults';
+import { useDestination } from './useDestination';
+import { useExport } from './useExport';
 import { fileName, useSource } from './useSource';
 import { useClipShortcuts } from './useClipShortcuts';
 import {
@@ -10,29 +12,19 @@ import {
   defaultAdvancedSettings,
   forNewClip,
 } from './lib/advanced';
-import { ClipCrop, ClipTrim, ExportRequest, SessionResult } from './lib/types';
-
-/**
- * Rust's export runs behind `runExport` (`src/ipc/export.ts`); VTG-7 wires
- * Convert to it with a destination folder, progress and results. Until then
- * Convert builds the request and stops here.
- */
-async function exportStub(request: ExportRequest): Promise<void> {
-  void request;
-  throw new Error('Converting is not built yet.');
-}
+import { ClipCrop, ClipTrim } from './lib/types';
 
 /**
  * The app's main view: mgck's Discord GIF page in advanced mode, without the
  * site's chrome. It holds the clip's trim, crop and settings; the source and
- * its preview come from `useSource`.
+ * its preview come from `useSource`, exports and their results from
+ * `useExport`, and where they are saved from `useDestination`.
  */
 export default function Editor() {
   const [settings, setSettings] = useState<AdvancedSettings>(
     defaultAdvancedSettings
   );
   const [edit, setEdit] = useState<{ trim?: ClipTrim; crop?: ClipCrop }>({});
-  const [results] = useState<SessionResult[]>([]);
   // A new clip starts with no trim or crop, upright, forward and uncaptioned.
   const onOpen = useCallback(() => {
     setEdit({});
@@ -40,6 +32,8 @@ export default function Editor() {
   }, []);
   const { state, dragging, chooseFile, close, unplayable } =
     useSource(onOpen);
+  const { job, results, start, cancel } = useExport();
+  const saveTo = useDestination(state.stage === 'open' ? state.path : null);
 
   useClipShortcuts({ openFile: () => void chooseFile() }, {});
 
@@ -96,7 +90,10 @@ export default function Editor() {
             onCropChange={(crop) => setEdit((current) => ({ ...current, crop }))}
             onRemove={close}
             onUnplayable={unplayable}
-            onExport={exportStub}
+            job={job}
+            saveTo={saveTo}
+            onExport={start}
+            onCancel={cancel}
           />
         ) : (
           results.length > 0 && (
