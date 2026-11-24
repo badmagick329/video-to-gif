@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- video-to-gif: a play button inside a looping arrow, in mgck's -dg colours: a
+       secondary-dg (#1a1a1a) tile, a primary-dg (#f97415) loop and a foreground-dg (#f9fafb)
+       play button. The play button is light, not orange, so the two shapes stay apart at
+       16 px. Regenerate the icon set from this file: see docs/context/releasing.md. -->
+  <rect x="32" y="32" width="960" height="960" rx="216" fill="#1a1a1a"/>
+  <!-- Loop: radius 320, a 300-degree clockwise arc from 0deg to 300deg, gap at the upper
+       right, where the arrowhead sits clear of the play button's corners. -->
+  <path d="M 832 512 A 320 320 0 1 1 672 234.9" fill="none" stroke="#f97415" stroke-width="100"/>
+  <!-- Arrowhead on the arc's end, pointing along the clockwise tangent into the gap. -->
+  <path d="M 732 131 L 612 338.8 L 802 310 Z" fill="#f97415" stroke="#f97415" stroke-width="16" stroke-linejoin="round"/>
+  <!-- Play button, its centroid on the loop's centre. -->
+  <path d="M 438 384 L 438 640 L 660 512 Z" fill="#f9fafb" stroke="#f9fafb" stroke-width="44" stroke-linejoin="round"/>
+</svg>

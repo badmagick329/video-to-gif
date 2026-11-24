@@ -9,6 +9,7 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
+    "icon": "tauri icon src-tauri/icons/icon.svg && node -e \"for (const d of ['android', 'ios']) require('fs').rmSync('src-tauri/icons/' + d, { recursive: true, force: true })\"",
     "lint": "eslint .",
     "test": "vitest run",
     "check": "cargo fmt --manifest-path src-tauri/Cargo.toml --check && cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings && cargo test --manifest-path src-tauri/Cargo.toml && tsc --noEmit && eslint . && vitest run"

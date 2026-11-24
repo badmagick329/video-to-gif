@@ -13,14 +13,23 @@ It is early work. It converts, saving next to the video or in a folder you pick,
 
 To build it you also need stable Rust, Node.js and pnpm.
 
+## Install
+
+Run `video-to-gif_0.1.0_x64-setup.exe`. It installs for your Windows account only, so it never asks for administrator rights. The app goes into `%LOCALAPPDATA%\video-to-gif` and gets a Start menu entry. On a PC without WebView2, the installer downloads it first.
+
+The installer isn't signed yet, so the first time you run it Windows SmartScreen shows "Windows protected your PC". Click *More info*, then *Run anyway*.
+
+To uninstall, open Settings > Apps > Installed apps and remove video-to-gif.
+
 ## Development
 
 ```sh
 pnpm install     # install frontend dependencies
 pnpm tauri dev   # run the app with hot reload
 pnpm check       # formatting, lints and tests for Rust and TypeScript
+pnpm tauri build # build the installer
 ```
 
 `pnpm check` stops at the first failure. It runs `cargo fmt --check`, Clippy with warnings as errors, `cargo test`, `tsc --noEmit`, ESLint and Vitest.
 
-The code is Tauri 2: a Rust backend that runs ffmpeg, and a React and TypeScript frontend. [docs/](docs/README.md) holds the architecture notes and design decisions.
+The code is Tauri 2: a Rust backend that runs ffmpeg, and a React and TypeScript frontend. [docs/](docs/README.md) holds the architecture notes and design decisions, and [docs/context/releasing.md](docs/context/releasing.md) covers versioning, the icon and the installer build.
