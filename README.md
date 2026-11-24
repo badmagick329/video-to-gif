@@ -9,7 +9,7 @@ It is early work. It converts, saving next to the video or in a folder you pick,
 ## Requirements
 
 - Windows 10 or 11 with WebView2 (Windows 11 ships it).
-- `ffmpeg` and `ffprobe` on your PATH. The app shows a setup message when either is missing. Check with `where.exe ffmpeg` and `where.exe ffprobe`.
+- `ffmpeg` and `ffprobe` 6.1 or newer on your PATH. The app shows a setup message when either is missing or ffmpeg is too old. Check with `where.exe ffmpeg` and `where.exe ffprobe`.
 
 To build it you also need stable Rust, Node.js and pnpm.
 

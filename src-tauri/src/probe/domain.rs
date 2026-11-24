@@ -14,11 +14,13 @@ use serde::{Deserialize, Serialize};
     rename_all_fields = "camelCase"
 )]
 pub enum Tool {
-    /// Resolved on PATH and answered `-version` like the real program.
+    /// Resolved on PATH and answered `-version` like the real program; ffmpeg also writes the
+    /// per-frame stats export reads progress from (6.1 and later).
     Found { path: String, version: String },
     /// No file of that name in any PATH directory.
     Missing,
-    /// A file of that name exists but did not run as ffmpeg/ffprobe, so the app cannot use it.
+    /// A file of that name exists but did not run as ffmpeg/ffprobe, or is an ffmpeg too old for
+    /// export, so the app cannot use it.
     Unusable { path: String, reason: String },
 }
 

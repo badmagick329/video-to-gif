@@ -13,6 +13,7 @@ use crate::export::domain::args::{SinglePass, job_args};
 use crate::export::domain::memory::MemoryEstimate;
 use crate::export::domain::outcome::{ExportError, ExportOutput, ExportProgress};
 use crate::export::domain::plan::{ExportPlan, output_name};
+use crate::export::domain::progress::ProgressMeter;
 use crate::export::domain::settings::FileType;
 use crate::export::infrastructure::captions::CaptionFile;
 use crate::export::infrastructure::job::{Job, JobEnd};
@@ -242,7 +243,8 @@ fn make_output(
         })
     };
     report(0.0);
-    let end = job.finish(output, plan.selection.output_seconds, &mut report);
+    let meter = ProgressMeter::new(&plan.selection, file_type);
+    let end = job.finish(output, meter, &mut report);
     control.detach();
 
     match end {

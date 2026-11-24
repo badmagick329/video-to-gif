@@ -10,7 +10,7 @@ use std::sync::{Mutex, MutexGuard};
 use std::thread;
 use std::time::Duration;
 
-use crate::preview::domain::progress_from_line;
+use crate::export::domain::progress::ProgressMeter;
 use crate::process;
 
 /// Lines of stderr kept for a failure's reason. With `-loglevel error` these are ffmpeg's own
@@ -44,7 +44,8 @@ pub enum JobEnd {
 }
 
 impl Job {
-    /// Starts `ffmpeg` with `args`, which must write progress to stdout (`-progress pipe:1`).
+    /// Starts `ffmpeg` with `args`, which write their progress lines to stdout
+    /// (`job_args`).
     pub fn start(ffmpeg: &Path, args: &[OsString]) -> Result<(Self, JobOutput), String> {
         let mut child = process::command(ffmpeg)
             .args(args)
@@ -68,18 +69,18 @@ impl Job {
         Ok((job, JobOutput { stdout, stderr }))
     }
 
-    /// Reads progress until ffmpeg exits, calling `on_progress` with 0..=1 of `expected_seconds`
-    /// of output, and reports how the job ended. Returns only once ffmpeg has exited, so its
-    /// output file is closed and can be renamed or deleted.
+    /// Reads ffmpeg's stdout through `meter` until ffmpeg exits, calling `on_progress` with each
+    /// rise in progress (0..=1), and reports how the job ended. Returns only once ffmpeg has
+    /// exited, so its output file is closed and can be renamed or deleted.
     pub fn finish(
         &self,
         output: JobOutput,
-        expected_seconds: f64,
+        mut meter: ProgressMeter,
         mut on_progress: impl FnMut(f64),
     ) -> JobEnd {
         for line in BufReader::new(output.stdout).lines() {
             let Ok(line) = line else { break };
-            if let Some(progress) = progress_from_line(&line, expected_seconds) {
+            if let Some(progress) = meter.read_line(&line) {
                 on_progress(progress);
             }
         }

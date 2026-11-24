@@ -81,6 +81,6 @@ test('shows the setup message when a found ffmpeg does not run', async () => {
   render(<App />);
 
   expect(
-    await screen.findByText(/ffmpeg at C:\\tools\\ffmpeg\.exe did not run/)
+    await screen.findByText(/ffmpeg at C:\\tools\\ffmpeg\.exe cannot be used/)
   ).toBeInTheDocument();
 });

@@ -11,6 +11,7 @@ use serde_json::{Value, json};
 use tempfile::TempDir;
 
 use super::*;
+use crate::export::domain::args::single_pass_args;
 use crate::export::domain::plan::ExportRequest;
 use crate::process;
 use crate::search_path::SearchPath;
@@ -453,6 +454,68 @@ fn plays_set_the_gif_and_webp_loop_counts() {
     );
     assert_eq!(gif_loop(&thrice.file(Gif)), Some(2));
     assert_eq!(webp_loop(&thrice.file(Webp)), 3);
+}
+
+/// Makes `file_type` from `plan` with mgck's command alone, without the app's progress reporting,
+/// into `dir`.
+fn reference_output(plan: &ExportPlan, file_type: FileType, dir: &Path) -> PathBuf {
+    let out = dir.join(format!("reference.{}", file_type.extension()));
+    let args = single_pass_args(&SinglePass::from_plan(plan, file_type, &out, None));
+    let output = process::command(&ffmpeg())
+        .args(["-v", "error", "-y"])
+        .args(args)
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    out
+}
+
+#[test]
+fn gif_and_webp_progress_moves_through_the_run_and_leaves_the_files_unchanged() {
+    let dir = TempDir::new().unwrap();
+    let source = clip(dir.path());
+    for direction in ["forward", "reverse"] {
+        let patch = json!({ "settings": { "fileTypes": ["gif", "webp"], "direction": direction } });
+        let plan = request(&source, patch.clone())
+            .validate(dir.path().to_owned())
+            .unwrap();
+        let run = export_request(&source, patch);
+        for file_type in [Gif, Webp] {
+            let what = format!("{direction} {file_type:?}");
+            let progress: Vec<f64> = run
+                .progress
+                .iter()
+                .filter(|p| p.file_type == file_type)
+                .map(|p| p.progress)
+                .collect();
+            // ffmpeg's own report sat at 0 until a GIF's palette or the reversed frames were
+            // ready, and a WebP's until its one packet was written at the end.
+            let between = progress.iter().filter(|&&p| p > 0.0 && p < 1.0).count();
+            assert!(between >= 3, "{what}: {progress:?}");
+            assert_eq!(progress.first(), Some(&0.0), "{what}");
+            assert_eq!(progress.last(), Some(&1.0), "{what}");
+            assert!(progress.is_sorted(), "{what}: {progress:?}");
+            if file_type == Gif || direction == "reverse" {
+                // The tap reports while the input is read, before anything reaches the encoder.
+                assert!(
+                    progress.iter().any(|&p| p > 0.0 && p < 0.2),
+                    "{what}: {progress:?}"
+                );
+            }
+
+            let file = run.file(file_type);
+            let reference = reference_output(&plan, file_type, dir.path());
+            assert!(
+                fs::read(&file).unwrap() == fs::read(&reference).unwrap(),
+                "{what} differs from mgck's command's output"
+            );
+            let probed = probe(&file);
+            assert_eq!((probed.width, probed.height), (80, 60), "{what}");
+            assert_close(probed.duration, 2.0, 0.11, &format!("{what} duration"));
+        }
+        assert_eq!(gif_loop(&run.file(Gif)), Some(0));
+        assert_eq!(webp_loop(&run.file(Webp)), 0);
+    }
 }
 
 #[test]

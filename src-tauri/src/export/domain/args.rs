@@ -6,6 +6,7 @@ use std::ffi::OsString;
 use std::path::Path;
 
 use crate::export::domain::plan::{Crop, ExportPlan, seek_start};
+use crate::export::domain::progress::{ENCODED, TAPPED, tap_share};
 use crate::export::domain::settings::{Direction, FileType, GifDither, Rotation, Settings};
 
 /// Where input seeking starts and how much of the input to read, in seconds.
@@ -62,31 +63,40 @@ impl<'a> SinglePass<'a> {
 }
 
 /// Options ahead of every run's own arguments: errors only on stderr, so its tail is the reason a
-/// run failed; progress as `key=value` lines on stdout instead of the stats line; and `-n`, so a
-/// run never overwrites a file, whatever name it is given.
-pub const RUNNER_ARGS: [&str; 8] = [
+/// run failed; no stats line, since progress comes as frame times on stdout ([`job_args`]); and
+/// `-n`, so a run never overwrites a file, whatever name it is given.
+pub const RUNNER_ARGS: [&str; 6] = [
     "-hide_banner",
     "-loglevel",
     "error",
     "-nostats",
-    "-progress",
-    "pipe:1",
     "-n",
     "-nostdin",
 ];
 
-/// [`RUNNER_ARGS`] followed by [`single_pass_args`].
+/// What the app runs: [`RUNNER_ARGS`], then [`single_pass_args`] with progress reporting added
+/// ([`crate::export::domain::progress`]). Each frame entering the encoder writes an
+/// `encoded=<seconds>` line to stdout; an output that holds frames until the input ends also
+/// splits its frames off before the holding filter into a null output, the tap, whose frames
+/// write `tapped=<seconds>`. The tap only adds a consumer of frames the graph makes anyway, so the
+/// output file is byte for byte what [`single_pass_args`] makes.
 pub fn job_args(pass: &SinglePass<'_>) -> Vec<OsString> {
     let mut args: Vec<OsString> = RUNNER_ARGS.map(OsString::from).into();
-    args.extend(single_pass_args(pass));
+    args.extend(pass_args(pass, true));
     args
 }
 
 /// One ffmpeg run per file type, in Gif Studio's filter order: crop, rotate, flips, speed, `fps`, a
 /// lanczos scale, captions, then direction. Cropping and dropping frames first leaves later filters
 /// as few pixels and frames as possible, and reversing last holds the smallest frames, since
-/// `reverse` keeps every one of them in memory.
+/// `reverse` keeps every one of them in memory. This is mgck's command, without progress reporting:
+/// the tests' reference for what [`job_args`] must produce.
+#[cfg(test)]
 pub fn single_pass_args(pass: &SinglePass<'_>) -> Vec<OsString> {
+    pass_args(pass, false)
+}
+
+fn pass_args(pass: &SinglePass<'_>, report_progress: bool) -> Vec<OsString> {
     let settings = pass.settings;
     let mut filters: Vec<String> = rotate_filters(settings.rotation)
         .iter()
@@ -112,13 +122,14 @@ pub fn single_pass_args(pass: &SinglePass<'_>) -> Vec<OsString> {
     } else {
         String::new()
     };
-    let video = format!(
-        "[0:v]{}{}{}{}",
+    // Everything up to the direction filter: the frames of the selection, played once.
+    let selection = format!(
+        "[0:v]{}{}{}",
         crop_filter(pass.crop),
         filters.join(","),
-        overlay,
-        direction_filter(settings.direction)
+        overlay
     );
+    let direction = direction_filter(settings.direction);
 
     let mut args = trim_input(pass.input, pass.trim);
     if let Some(captions) = pass.captions {
@@ -126,23 +137,20 @@ pub fn single_pass_args(pass: &SinglePass<'_>) -> Vec<OsString> {
         args.push(captions.into());
     }
 
-    let rest: Vec<String> = match pass.file_type {
+    // What follows the selection in the graph, ending in `[out]`, and the encoder's options.
+    let (tail, options): (String, Vec<String>) = match pass.file_type {
         FileType::Gif => {
             // stats_mode=diff and diff_mode=rectangle spend the palette and the re-encoding on
             // what moves, which keeps static backgrounds clean.
-            let graph = format!(
-                "{video},split[a][b];[a]palettegen=max_colors={}:stats_mode=diff[p];[b][p]paletteuse={}:diff_mode=rectangle[out]",
+            let tail = format!(
+                "{direction},split[a][b];[a]palettegen=max_colors={}:stats_mode=diff[p];[b][p]paletteuse={}:diff_mode=rectangle[out]",
                 settings.gif_colors,
                 dither_option(settings.gif_dither)
             );
-            vec![
-                "-filter_complex".into(),
-                graph,
-                "-map".into(),
-                "[out]".into(),
-                "-loop".into(),
-                gif_loop(settings.plays).to_string(),
-            ]
+            (
+                tail,
+                vec!["-loop".into(), gif_loop(settings.plays).to_string()],
+            )
         }
         FileType::Webp => {
             // libwebp_anim, which ffmpeg.wasm lacked, encodes the whole animation at once, so
@@ -150,11 +158,7 @@ pub fn single_pass_args(pass: &SinglePass<'_>) -> Vec<OsString> {
             // came out up to 24 times smaller at the same quality, and on moving footage about
             // the same size per unit of quality as mgck's libwebp route
             // (docs/decisions/2026-11-24-webp-anim-encoder.md). `-loop` still reaches the file.
-            vec![
-                "-filter_complex".into(),
-                format!("{video}[out]"),
-                "-map".into(),
-                "[out]".into(),
+            let options = vec![
                 "-c:v".into(),
                 "libwebp_anim".into(),
                 "-lossless".into(),
@@ -165,14 +169,11 @@ pub fn single_pass_args(pass: &SinglePass<'_>) -> Vec<OsString> {
                 "4".into(),
                 "-loop".into(),
                 settings.plays.to_string(),
-            ]
+            ];
+            (format!("{direction}[out]"), options)
         }
         FileType::Mp4 => {
             let mut mp4 = vec![
-                "-filter_complex".into(),
-                format!("{video},format=yuv420p[out]"),
-                "-map".into(),
-                "[out]".into(),
                 "-c:v".into(),
                 "libx264".into(),
                 "-preset".into(),
@@ -192,12 +193,55 @@ pub fn single_pass_args(pass: &SinglePass<'_>) -> Vec<OsString> {
             } else {
                 mp4.push("-an".into());
             }
-            mp4
+            (format!("{direction},format=yuv420p[out]"), mp4)
         }
     };
-    args.extend(rest.into_iter().map(OsString::from));
+
+    let tap = report_progress && tap_share(pass.file_type, settings.direction).is_some();
+    let graph = if tap {
+        // Every tapped tail starts with a filter (a GIF's split or `reverse`), which now follows
+        // the `[main]` label instead of a comma.
+        let tail = tail
+            .strip_prefix(',')
+            .expect("a tapped output continues with a filter");
+        format!("{selection},split[tap][main];[main]{tail}")
+    } else {
+        format!("{selection}{tail}")
+    };
+    args.extend(
+        [
+            "-filter_complex".to_owned(),
+            graph,
+            "-map".into(),
+            "[out]".into(),
+        ]
+        .into_iter()
+        .chain(options)
+        .map(OsString::from),
+    );
+    if report_progress {
+        args.extend(frame_times("v:0", ENCODED));
+    }
     args.push(pass.output.into());
+    if tap {
+        args.extend(["-map", "[tap]"].map(OsString::from));
+        args.extend(frame_times("v", TAPPED));
+        args.extend(["-f", "null", "-"].map(OsString::from));
+    }
     args
+}
+
+/// Output options that write `<key>=<seconds>` to stdout as each frame of the `stream` streams
+/// enters its encoder. Per frame and flushed per line, unlike `-progress`, whose report follows
+/// the muxed file and waits until every output has started.
+fn frame_times(stream: &str, key: &str) -> [OsString; 4] {
+    [
+        format!("-stats_enc_pre:{stream}"),
+        "pipe:1".to_owned(),
+        format!("-stats_enc_pre_fmt:{stream}"),
+        format!("{key}={{t}}"),
+    ]
+    .map(OsString::from)
 }
 
 /// Crop before scaling so later filters spend their work on the kept image. ffmpeg evaluates the

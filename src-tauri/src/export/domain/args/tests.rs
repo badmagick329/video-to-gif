@@ -46,6 +46,15 @@ fn command_with(
     patch: impl FnOnce(&mut Settings),
     extra: Extra,
 ) -> Vec<String> {
+    build(file_type, patch, extra, single_pass_args)
+}
+
+fn build(
+    file_type: FileType,
+    patch: impl FnOnce(&mut Settings),
+    extra: Extra,
+    args: fn(&SinglePass<'_>) -> Vec<OsString>,
+) -> Vec<String> {
     let mut settings = defaults();
     patch(&mut settings);
     let output = format!("output.{}", file_type.extension());
@@ -60,7 +69,7 @@ fn command_with(
         keep_sound: extra.keep_sound,
         captions: extra.captions.then_some(Path::new("captions.png")),
     };
-    single_pass_args(&pass)
+    args(&pass)
         .into_iter()
         .map(|arg| arg.into_string().unwrap())
         .collect()
@@ -510,26 +519,91 @@ fn sound_still_comes_from_the_clip_and_no_image_means_no_overlay() {
     }
 }
 
+/// The arguments the app runs for `file_type` with `patch`: [`job_args`], without the runner's.
+fn job(file_type: FileType, patch: impl FnOnce(&mut Settings)) -> Vec<String> {
+    let args = build(file_type, patch, EXTRA, job_args);
+    assert_eq!(args[..RUNNER_ARGS.len()], strings(&RUNNER_ARGS));
+    args[RUNNER_ARGS.len()..].to_vec()
+}
+
+fn encoded(output: &str) -> Vec<String> {
+    strings(&[
+        "-stats_enc_pre:v:0",
+        "pipe:1",
+        "-stats_enc_pre_fmt:v:0",
+        "encoded={t}",
+        output,
+    ])
+}
+
+const TAP_OUTPUT: [&str; 9] = [
+    "-map",
+    "[tap]",
+    "-stats_enc_pre:v",
+    "pipe:1",
+    "-stats_enc_pre_fmt:v",
+    "tapped={t}",
+    "-f",
+    "null",
+    "-",
+];
+
 #[test]
 fn every_run_reports_progress_on_stdout_and_never_overwrites() {
-    let settings = defaults();
-    let pass = SinglePass {
-        input: Path::new("input.mp4"),
-        output: Path::new("output.gif"),
-        file_type: Gif,
-        settings: &settings,
-        crop: None,
-        trim: None,
-        width: Some(480),
-        keep_sound: false,
-        captions: None,
+    for file_type in [Gif, Webp, Mp4] {
+        let args = build(file_type, |_| {}, EXTRA, job_args);
+        assert!(args.contains(&"-n".to_owned()));
+        assert!(!args.contains(&"-progress".to_owned()));
+    }
+    // A streaming output is mgck's command with its encoder's frame times on stdout.
+    let output = "output.webp";
+    let mut expected = plain(Webp);
+    expected.pop();
+    expected.extend(encoded(output));
+    assert_eq!(job(Webp, |_| {}), expected);
+    let mp4 = job(Mp4, |s| s.direction = Direction::Boomerang);
+    assert_eq!(
+        graph(&mp4),
+        graph(&command(Mp4, |s| s.direction = Direction::Boomerang))
+    );
+    assert!(mp4.ends_with(&encoded("output.mp4")));
+}
+
+#[test]
+fn outputs_that_hold_frames_tap_the_selection_before_the_holding_filter() {
+    let tapped = |args: &[String], output: &str| {
+        let tap_at = args.len() - TAP_OUTPUT.len();
+        assert_eq!(args[tap_at..], strings(&TAP_OUTPUT));
+        assert_eq!(args[tap_at - 5..tap_at], encoded(output));
     };
-    let args: Vec<String> = job_args(&pass)
-        .into_iter()
-        .map(|a| a.into_string().unwrap())
-        .collect();
-    assert_eq!(args[..RUNNER_ARGS.len()], strings(&RUNNER_ARGS));
-    assert_eq!(args[RUNNER_ARGS.len()..], plain(Gif));
-    assert_eq!(option(&args, "-progress"), "pipe:1");
-    assert!(args.contains(&"-n".to_owned()));
+    let reverse = |s: &mut Settings| s.direction = Direction::Reverse;
+    let boomerang = |s: &mut Settings| s.direction = Direction::Boomerang;
+    const HEAD: &str = "[0:v]fps=15,scale=480:-2:flags=lanczos,split[tap][main];[main]";
+
+    let gif = job(Gif, |_| {});
+    assert_eq!(graph(&gif), format!("{HEAD}{PALETTE}"));
+    tapped(&gif, "output.gif");
+    let gif = job(Gif, reverse);
+    assert_eq!(graph(&gif), format!("{HEAD}reverse,{PALETTE}"));
+    tapped(&gif, "output.gif");
+    let gif = job(Gif, boomerang);
+    assert_eq!(graph(&gif), format!("{HEAD}{BOUNCE},{PALETTE}"));
+    tapped(&gif, "output.gif");
+    let webp = job(Webp, reverse);
+    assert_eq!(graph(&webp), format!("{HEAD}reverse[out]"));
+    tapped(&webp, "output.webp");
+    let mp4 = job(Mp4, reverse);
+    assert_eq!(graph(&mp4), format!("{HEAD}reverse,format=yuv420p[out]"));
+    tapped(&mp4, "output.mp4");
+    // Captions are part of the selection the tap sees.
+    let captioned = build(
+        Gif,
+        |_| {},
+        Extra {
+            captions: true,
+            ..EXTRA
+        },
+        job_args,
+    );
+    assert!(graph(&captioned).contains("overlay=(W-w)/2:(H-h)/2:format=rgb,split[tap][main]"));
 }

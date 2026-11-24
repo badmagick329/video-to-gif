@@ -6,22 +6,33 @@ use crate::probe::domain::{FfmpegTools, Tool};
 use crate::process;
 use crate::search_path::SearchPath;
 
-/// Locates both programs and asks each for its version. A found file that fails `-version` is
-/// reported unusable rather than found, so the setup message also covers a broken install.
+/// Locates both programs and asks each for its version, and checks that ffmpeg has the options
+/// export needs. A found file that fails either check is reported unusable rather than found, so
+/// the setup message also covers a broken or too old install.
 pub fn find_tools(search: &SearchPath) -> FfmpegTools {
     let located = search.locate_tools();
     let check = |name: &str, found: Option<&Path>| match found {
         None => Tool::Missing,
-        Some(path) => match read_version(path, name) {
-            Ok(version) => Tool::Found {
-                path: path.display().to_string(),
-                version,
-            },
-            Err(reason) => Tool::Unusable {
-                path: path.display().to_string(),
-                reason,
-            },
-        },
+        Some(path) => {
+            let checked = read_version(path, name).and_then(|version| {
+                if name == "ffmpeg" && !reports_frame_times(path) {
+                    return Err(format!(
+                        "ffmpeg 6.1 or newer is needed (this one is {version})"
+                    ));
+                }
+                Ok(version)
+            });
+            match checked {
+                Ok(version) => Tool::Found {
+                    path: path.display().to_string(),
+                    version,
+                },
+                Err(reason) => Tool::Unusable {
+                    path: path.display().to_string(),
+                    reason,
+                },
+            }
+        }
     };
     FfmpegTools {
         ffmpeg: check("ffmpeg", located.ffmpeg.as_deref()),
@@ -50,6 +61,28 @@ fn read_version(program: &Path, name: &str) -> Result<String, String> {
         .and_then(|rest| rest.split_whitespace().next())
         .map(str::to_owned)
         .ok_or_else(|| format!("`-version` printed {first_line:?}, not an {name} version line"))
+}
+
+/// Whether `ffmpeg` writes per-frame encoder stats (`-stats_enc_pre`, ffmpeg 6.1 and later), which
+/// export reads its progress from. Asked by capability rather than by version, since nightly
+/// builds report `N-<commit>` instead of a release number: one 16×16 frame through the option,
+/// about 40 ms, the same as `-version` (`-h full` takes twice that and prints 1.3 MB). An older
+/// ffmpeg rejects the option and exits with an error.
+fn reports_frame_times(ffmpeg: &Path) -> bool {
+    process::command(ffmpeg)
+        .args(["-hide_banner", "-loglevel", "error", "-nostdin"])
+        .args(["-f", "lavfi", "-i", "nullsrc=size=16x16", "-frames:v", "1"])
+        .args([
+            "-stats_enc_pre",
+            "pipe:1",
+            "-stats_enc_pre_fmt",
+            "frame={n}",
+        ])
+        .args(["-f", "null", "-"])
+        .output()
+        .is_ok_and(|output| {
+            output.status.success() && String::from_utf8_lossy(&output.stdout).contains("frame=0")
+        })
 }
 
 #[cfg(test)]
@@ -102,5 +135,29 @@ mod tests {
             tools.ffmpeg
         );
         assert_eq!(tools.ffprobe, Tool::Missing);
+    }
+
+    /// Answers `-version` as ffmpeg 6.0 does and rejects everything else the way ffmpeg rejects an
+    /// option it lacks.
+    #[cfg(windows)]
+    const FFMPEG_6_0: &str = "@echo off
+        if \"%1\"==\"-version\" (echo ffmpeg version 6.0 Copyright (c^) 2000-2023 the FFmpeg developers& exit /b 0)
+        echo Unrecognized option 'stats_enc_pre'. 1>&2
+        exit /b 8
+";
+
+    #[cfg(windows)]
+    #[test]
+    fn an_ffmpeg_without_per_frame_stats_is_unusable_as_too_old() {
+        let dir = tempfile::TempDir::new().unwrap();
+        std::fs::write(dir.path().join("ffmpeg.cmd"), FFMPEG_6_0).unwrap();
+        let search = SearchPath::new(dir.path().as_os_str(), Some(".CMD".as_ref()));
+
+        match find_tools(&search).ffmpeg {
+            Tool::Unusable { reason, .. } => {
+                assert_eq!(reason, "ffmpeg 6.1 or newer is needed (this one is 6.0)")
+            }
+            other => panic!("{other:?}"),
+        }
     }
 }

@@ -7,7 +7,7 @@ function problem(name: string, tool: Tool): string | null {
     case 'missing':
       return `${name} was not found on PATH.`;
     case 'unusable':
-      return `${name} at ${tool.path} did not run: ${tool.reason}`;
+      return `${name} at ${tool.path} cannot be used: ${tool.reason}`;
   }
 }
 
