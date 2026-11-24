@@ -31,9 +31,12 @@ export default function Inspector({
 }) {
   const [tab, setTab] = useState<Tab>('output');
   const id = useId();
+  // The badge counts files made, not file types that failed. Starting a run never switches tabs:
+  // the footer shows its progress on either.
+  const outputs = results.filter((result) => !('failed' in result)).length;
   const tabs: Array<{ value: Tab; label: string; badge?: number }> = [
     { value: 'output', label: 'Output' },
-    { value: 'exports', label: 'Exports', badge: results.length },
+    { value: 'exports', label: 'Exports', badge: outputs || undefined },
   ];
   return (
     <aside
@@ -57,10 +60,11 @@ export default function Inspector({
             onClick={() => setTab(value)}
           >
             {label}
+            {badge !== undefined && ' '}
             {badge !== undefined && (
               <span
-                aria-label={`${badge} ${badge === 1 ? 'item' : 'items'}`}
-                className='ml-1 inline-block min-w-4 rounded-lg bg-line-control px-1 text-center text-2xs text-fg-label'
+                aria-label={`${badge} ${badge === 1 ? 'output' : 'outputs'}`}
+                className='ml-1 inline-block min-w-4 rounded-lg bg-accent px-1 text-center text-2xs font-semibold text-accent-fg'
               >
                 {badge}
               </span>

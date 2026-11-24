@@ -187,7 +187,7 @@ describe('Export', () => {
     );
     expect(screen.queryByRole('progressbar', { name: 'Export progress' })).toBeNull();
     expect(within(results()).getAllByRole('listitem')).toHaveLength(1);
-    expect(screen.getByRole('tab', { name: /^Exports/ })).toHaveTextContent('Exports1');
+    expect(screen.getByRole('tab', { name: /^Exports/ })).toHaveAccessibleName('Exports 1 output');
   });
 
   test('a failed file type says so briefly and folds ffmpeg’s error away', async () => {
@@ -326,7 +326,36 @@ describe('This session', () => {
     await openClip('C:\\videos\\two.mp4', { width: 1280, height: 720 });
     expect(screen.getByRole('button', { name: 'Close two.mp4' })).toBeInTheDocument();
     expect(within(results()).getByRole('listitem')).toHaveTextContent('one.gif');
-    expect(screen.getByRole('tab', { name: /^Exports/ })).toHaveTextContent('Exports1');
+    expect(screen.getByRole('tab', { name: /^Exports/ })).toHaveAccessibleName('Exports 1 output');
+  });
+
+  test('the tab’s badge counts outputs; starting a run stays on the tab the user was on', async () => {
+    await openEditor();
+    fireEvent.click(screen.getByRole('button', { name: 'WebP' }));
+    const exportsTab = () => screen.getByRole('tab', { name: /^Exports/ });
+    expect(exportsTab()).toHaveTextContent(/^Exports$/);
+
+    // Export from the Output tab stays there.
+    let run = heldExport();
+    await runExport();
+    expect(screen.getByRole('tab', { name: 'Output' })).toHaveAttribute('aria-selected', 'true');
+    await run.finish([done('gif'), { status: 'failed', fileType: 'webp', reason: 'x' }]);
+    expect(exportsTab()).toHaveAccessibleName('Exports 1 output');
+
+    // Ctrl+Enter from the Exports tab stays there, with the run in view.
+    showTab('Exports');
+    run = heldExport();
+    await act(async () =>
+      fireEvent.keyDown(screen.getByRole('tab', { name: /^Exports/ }), {
+        key: 'Enter',
+        ctrlKey: true,
+      })
+    );
+    expect(run.calls).toHaveLength(1);
+    expect(exportsTab()).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('region', { name: /^Running/ })).toBeInTheDocument();
+    await run.finish([done('gif', 'D:\\gifs'), done('webp', 'D:\\gifs')]);
+    expect(exportsTab()).toHaveAccessibleName('Exports 3 outputs');
   });
 
   test('an output moved away since it was made says so when opened', async () => {
