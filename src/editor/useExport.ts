@@ -10,19 +10,9 @@ import {
 } from '../ipc/export';
 import { fileUrl } from '../ipc/preview';
 import { fileName } from './useSource';
+import type { ExportJob } from './lib/export-run';
 import { fileTypeInfo, formatBytes, type FileType } from './lib/output-settings';
 import type { ExportRequest, SessionResult } from './lib/types';
-
-/** mgck's `Job`: the running export, for its per-file-type progress bar. */
-export type ExportJob = {
-  /** The ticked file types in run order. */
-  fileTypes: readonly FileType[];
-  /** The one being made. */
-  fileType: FileType;
-  /** From 0 to 1 for that file type. */
-  done: number;
-  cancelling: boolean;
-};
 
 /** What the editor says under Export when a run ends or cannot start. */
 export type ExportNotice = {
@@ -137,6 +127,15 @@ export function useExport() {
     settled.add(output.fileType);
     const result = toResult(output);
     if (result) setResults((current) => [...current, result]);
+    setJob((current) => {
+      if (!current) return current;
+      const job = { ...current, settled: { ...current.settled, [output.fileType]: output } };
+      // The next file type starts now; its first progress event may come a moment later.
+      const next = job.fileTypes.find((type) => !job.settled[type]);
+      return next && next !== job.fileType
+        ? { ...job, fileType: next, done: 0, fileTypeStartedAt: Date.now() }
+        : job;
+    });
   }, []);
 
   // Subscribed for the page's lifetime, not per run: listen() registers asynchronously, so a
@@ -144,8 +143,13 @@ export function useExport() {
   useEffect(() => {
     const unlisten = Promise.all([
       onExportProgress(({ fileType, progress }) => {
-        if (!running.current) return;
-        setJob((current) => current && { ...current, fileType, done: progress });
+        // Between runs events are stale; a settled file type's are late.
+        if (!running.current || running.current.has(fileType)) return;
+        setJob((current) => {
+          if (!current) return current;
+          if (fileType === current.fileType) return { ...current, done: progress };
+          return { ...current, fileType, done: progress, fileTypeStartedAt: Date.now() };
+        });
       }),
       onExportOutput(settle),
     ]);
@@ -155,11 +159,25 @@ export function useExport() {
   }, [settle]);
 
   const start = useCallback(
-    async (request: ExportRequest, destination: string): Promise<ExportNotice> => {
+    async (
+      request: ExportRequest,
+      destination: string,
+      estimates: Partial<Record<FileType, number>> = {}
+    ): Promise<ExportNotice> => {
       const fileTypes = request.settings.fileTypes;
       running.current = new Set();
-      // Export is disabled with no file type ticked, so there is a first one.
-      setJob({ fileTypes, fileType: fileTypes[0]!, done: 0, cancelling: false });
+      const now = Date.now();
+      setJob({
+        fileTypes,
+        // Export is disabled with no file type ticked, so there is a first one.
+        fileType: fileTypes[0]!,
+        done: 0,
+        startedAt: now,
+        fileTypeStartedAt: now,
+        settled: {},
+        estimates,
+        cancelling: false,
+      });
       try {
         const outputs = await runExport(request, destination);
         // Events normally settle each output first; this covers any that arrived late or never.

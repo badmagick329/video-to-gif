@@ -13,6 +13,7 @@ import {
   core,
   dialog,
   emit,
+  estimateAnswers,
   mock2dCanvas,
   openClip,
   renderWithListeners,
@@ -226,6 +227,48 @@ describe('Export', () => {
     expect(screen.getByRole('alert')).toHaveTextContent(
       'There is no folder at C:\\videos any more. Pick another with Save to.'
     );
+  });
+});
+
+describe('Running card', () => {
+  const MiB = 1024 * 1024;
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+  const wait = (ms: number) => act(async () => void (await vi.advanceTimersByTimeAsync(ms)));
+  const card = () => {
+    showTab('Exports');
+    return screen.getByRole('region', { name: /^Running/ });
+  };
+  const rows = () => within(card()).getAllByRole('listitem').map((row) => row.textContent);
+
+  test('shows each ticked file type: done with its size, the one being made with percent, time left and estimate, the rest queued', async () => {
+    await openEditor({
+      estimate_output_size: estimateAnswers({ gif: 61 * MiB, webp: 8.4 * MiB, mp4: 5.3 * MiB }),
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'WebP' }));
+    fireEvent.click(screen.getByRole('button', { name: 'MP4' }));
+    // Estimates start once the settings have been still for 1.5 s.
+    await wait(1600);
+    const run = heldExport();
+    await runExport();
+
+    expect(rows()).toEqual(['GIF0%est 61.0 MiB', 'WebPQueued', 'MP4Queued']);
+    await emit('export-output', done('gif'));
+    await wait(4000);
+    await emit('export-progress', { fileType: 'webp', progress: 0.4 });
+
+    expect(rows()).toEqual(['GIF1.5 MiB✓', 'WebP40% · 6.0 s leftest 8.4 MiB', 'MP4Queued']);
+    expect(within(card()).getByRole('listitem', { name: 'GIF done, 1.5 MiB' })).toBeInTheDocument();
+    expect(within(card()).getByRole('progressbar', { name: 'WebP progress' })).toHaveAttribute(
+      'aria-valuenow',
+      '40'
+    );
+    expect(card()).toHaveTextContent('started 0:04 ago');
+
+    await emit('export-output', done('webp'));
+    await emit('export-output', done('mp4'));
+    await run.finish([done('gif'), done('webp'), done('mp4')]);
+    expect(screen.queryByRole('region', { name: /^Running/ })).toBeNull();
   });
 });
 

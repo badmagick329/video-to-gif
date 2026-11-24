@@ -1,25 +1,30 @@
 import { ReactNode, useId, useState } from 'react';
 
+import RunningCard from './RunningCard';
 import SessionResults from './SessionResults';
+import type { ExportJob } from './lib/export-run';
 import type { SessionResult } from './lib/types';
 
 type Tab = 'output' | 'exports';
 
 /**
  * The docked panel on the window's right, spanning the viewer and the timeline. The Output tab
- * holds the output settings over the pinned export footer; the Exports tab holds what this
- * session made. Only the tab's body scrolls.
+ * holds the output settings over the pinned export footer; the Exports tab holds the running
+ * export's card and what this session made. Only the tab's body scrolls.
  */
 export default function Inspector({
   output,
   footer,
   results,
+  job,
 }: {
   /** The Output tab's settings, or what stands in for them with nothing open. */
   output: ReactNode;
   /** The export footer, pinned under the Output tab's settings. */
   footer?: ReactNode;
   results: readonly SessionResult[];
+  /** The running export, which may have started before this clip was opened. */
+  job: ExportJob | null;
 }) {
   const [tab, setTab] = useState<Tab>('output');
   const id = useId();
@@ -78,8 +83,9 @@ export default function Inspector({
         id={`${id}-exports-panel`}
         aria-labelledby={`${id}-exports`}
         hidden={tab !== 'exports'}
-        className='min-h-0 flex-1 overflow-y-auto p-3.5'
+        className='flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto p-3'
       >
+        {job && <RunningCard job={job} />}
         <SessionResults results={results} />
       </div>
     </aside>

@@ -1,7 +1,8 @@
 import type { MemoryEstimate } from '../ipc/export';
 import { ErrorDetails } from './SessionResults';
 import type { Destination } from './useDestination';
-import type { ExportJob, ExportNotice } from './useExport';
+import type { ExportNotice } from './useExport';
+import type { ExportJob } from './lib/export-run';
 import type { FileTypeEstimate } from './useSizeEstimate';
 import {
   OutputSettings,

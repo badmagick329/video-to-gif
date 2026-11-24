@@ -6,8 +6,9 @@ import OutputPreview from './OutputPreview';
 import OutputSettingsForm from './OutputSettingsForm';
 import type { MemoryEstimate } from '../ipc/export';
 import { hasAudio } from '../ipc/probe';
-import type { ExportJob, ExportNotice } from './useExport';
-import { usePlaying, useSizeEstimate } from './useSizeEstimate';
+import type { ExportNotice } from './useExport';
+import type { ExportJob } from './lib/export-run';
+import { usePlaying, useSizeEstimate, type FileTypeEstimate } from './useSizeEstimate';
 import { fileName, type OpenSource } from './useSource';
 import { useClipShortcuts } from './useClipShortcuts';
 import VideoTrimmer from './VideoTrimmer';
@@ -20,6 +21,7 @@ import {
   useViewerMode,
 } from './Viewer';
 import {
+  FileType,
   OutputSettings,
   croppedSourceSize,
   fileTypeOrder,
@@ -77,7 +79,12 @@ export default function SourceEditor({
   job: ExportJob | null;
   saveTo: SaveTo;
   /** Exports into `saveTo`'s folder; what it resolves with is shown under the button. */
-  onExport: (request: ExportRequest, destination: string) => Promise<ExportNotice>;
+  onExport: (
+    request: ExportRequest,
+    destination: string,
+    /** Each file type's size estimate at Export, for the running card. */
+    estimates: Partial<Record<FileType, number>>
+  ) => Promise<ExportNotice>;
   onCancel: () => void;
 }) {
   const editor = useRef<HTMLDivElement>(null);
@@ -134,7 +141,8 @@ export default function SourceEditor({
           captions,
           acceptPaging: paging,
         },
-        destination.folder
+        destination.folder,
+        readyEstimates(estimates)
       );
       setPreparing(false);
       setNotice(await exporting);
@@ -231,6 +239,7 @@ export default function SourceEditor({
       )}
       <Inspector
         results={results}
+        job={job}
         output={
           // A fieldset defaults to min-width: min-content, so without min-w-0
           // wide settings rows push past the column instead of shrinking.
@@ -265,4 +274,14 @@ export default function SourceEditor({
       />
     </div>
   );
+}
+
+/** The bytes of each estimate that is up to date; a stale one was for other settings. */
+function readyEstimates(
+  estimates: Partial<Record<FileType, FileTypeEstimate>>
+): Partial<Record<FileType, number>> {
+  const ready: Partial<Record<FileType, number>> = {};
+  for (const [type, estimate] of Object.entries(estimates) as Array<[FileType, FileTypeEstimate]>)
+    if (estimate.state === 'ready') ready[type] = estimate.bytes;
+  return ready;
 }

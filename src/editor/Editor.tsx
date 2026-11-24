@@ -125,6 +125,7 @@ export default function Editor({ ffmpeg }: { ffmpeg: Tool }) {
           </PlaceholderColumn>
           <Inspector
             results={results}
+            job={job}
             output={
               <p className='px-6 py-10 text-center text-dim'>
                 Output settings appear here once a video is open.
