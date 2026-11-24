@@ -857,6 +857,86 @@ fn a_cancelled_run_leaves_nothing_in_the_destination() {
 }
 
 #[test]
+fn cancelling_mid_run_keeps_the_finished_outputs_and_leaves_no_partial_file() {
+    let dir = TempDir::new().unwrap();
+    // Long enough that the WebP is still encoding when the cancel lands.
+    let path = generate(
+        dir.path(),
+        "long.mp4",
+        &[
+            "-f",
+            "lavfi",
+            "-i",
+            "testsrc2=size=320x240:rate=30:duration=20",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "ultrafast",
+            "-pix_fmt",
+            "yuv420p",
+        ],
+    );
+    let source = Source {
+        path,
+        info: info(320, 240, 20.0, 30.0, None),
+    };
+    let destination = TempDir::new().unwrap();
+    let work = TempDir::new().unwrap();
+    let plan = request(
+        &source,
+        json!({ "settings": { "width": "original", "fps": 30, "fileTypes": ["gif", "webp", "mp4"] } }),
+    )
+    .validate(destination.path().to_owned())
+    .unwrap();
+    let control = ExportControl::default();
+    let mut emitted = Vec::new();
+
+    let (outputs, seen) = thread::scope(|scope| {
+        // Cancel once the WebP's partial file appears, mid-encode, with the GIF already saved.
+        let watcher = scope.spawn(|| {
+            loop {
+                if let Some(name) = names(destination.path())
+                    .into_iter()
+                    .find(|name| name.contains(".part-") && name.ends_with(".webp"))
+                {
+                    control.cancel(false);
+                    return name;
+                }
+                thread::sleep(Duration::from_millis(5));
+            }
+        });
+        let env = Environment {
+            ffmpeg: &ffmpeg(),
+            work_dir: work.path(),
+            available_memory: None,
+        };
+        let outputs = run(&plan, env, &control, |_| {}, |o| emitted.push(o.clone())).unwrap();
+        (outputs, watcher.join().unwrap())
+    });
+
+    assert!(seen.starts_with("long.part-"), "{seen}");
+    let gif = destination.path().join("long.gif");
+    assert!(matches!(
+        &outputs[0],
+        ExportOutput::Done { file_type: Gif, path, .. } if Path::new(path) == gif
+    ));
+    assert_eq!(
+        outputs[1..],
+        [
+            ExportOutput::Cancelled { file_type: Webp },
+            ExportOutput::Cancelled { file_type: Mp4 },
+        ]
+    );
+    assert_eq!(emitted, outputs, "each output is emitted as it settles");
+    assert_eq!(
+        names(destination.path()),
+        ["long.gif"],
+        "only the finished output is left"
+    );
+    assert_eq!(probe(&gif).width, 320);
+}
+
+#[test]
 fn a_failed_file_type_leaves_nothing_and_the_rest_still_run() {
     let dir = TempDir::new().unwrap();
     let source = clip(dir.path());

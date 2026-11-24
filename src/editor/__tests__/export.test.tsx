@@ -1,4 +1,4 @@
-// Export through Rust's export: progress, cancel, failures, Made this session with Open and Show
+// Export through Rust's export: progress, cancel, failures, the This session list with Open, Show
 // in folder, the frame-memory warning and where outputs are saved. The backend's part is played by
 // ./tauri, with run_export held open so each test can emit events mid-run.
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
@@ -94,7 +94,7 @@ const progressBar = () => {
 };
 const results = () => {
   showTab('Exports');
-  return screen.getByRole('region', { name: 'Made this session' });
+  return screen.getByRole('region', { name: /^This session/ });
 };
 const saveTo = () => {
   showTab('Output');
@@ -144,14 +144,16 @@ describe('Export', () => {
     expect(screen.getByRole('status')).toHaveTextContent(
       'Saved GIF, WebP and MP4 to C:\\videos.'
     );
-    // Events and the resolved list both carry each output; it is listed once.
+    // Events and the resolved list both carry each output; it is listed once, newest first.
     const rows = within(results()).getAllByRole('listitem');
     expect(rows.map((row) => within(row).getByText(/^one\./).textContent)).toEqual([
-      'one.gif',
-      'one.webp',
       'one.mp4',
+      'one.webp',
+      'one.gif',
     ]);
-    expect(within(rows[2]!).getByLabelText('MP4 preview').tagName).toBe('VIDEO');
+    expect(within(rows[0]!).getByLabelText('MP4 preview').tagName).toBe('VIDEO');
+    // The header names the folder the newest output went to.
+    expect(within(results()).getByRole('heading')).toHaveTextContent('This sessionC:\\videos');
     showTab('Output');
     expect(exportButton()).toBeEnabled();
   });
@@ -198,8 +200,8 @@ describe('Export', () => {
     expect(screen.getByRole('alert')).toHaveTextContent(
       "WebP failed; ffmpeg's error is in the Exports tab. GIF saved to C:\\videos."
     );
-    const failed = within(results()).getAllByRole('listitem')[1]!;
-    expect(failed).toHaveTextContent('WebP conversion failed');
+    const failed = within(results()).getAllByRole('listitem')[0]!;
+    expect(failed).toHaveTextContent('WebP failed');
     const details = failed.querySelector('details')!;
     expect(details.open).toBe(false);
     fireEvent.click(within(failed).getByText("ffmpeg's error"));
@@ -280,7 +282,7 @@ describe('Running card', () => {
   });
 });
 
-describe('Made this session', () => {
+describe('This session', () => {
   test('Open and Show in folder send Rust the output’s own path', async () => {
     await openEditor();
     const run = heldExport();
@@ -292,6 +294,17 @@ describe('Made this session', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Show one.gif in folder' }));
     expect(invoked('open_output')).toEqual([{ path: 'C:\\videos\\one.gif' }]);
     expect(invoked('show_output_in_folder')).toEqual([{ path: 'C:\\videos\\one.gif' }]);
+  });
+
+  test('opening a different video keeps the list', async () => {
+    await openEditor();
+    const run = heldExport();
+    await runExport();
+    await run.finish([done('gif')]);
+    await openClip('C:\\videos\\two.mp4', { width: 1280, height: 720 });
+    expect(screen.getByRole('button', { name: 'Close two.mp4' })).toBeInTheDocument();
+    expect(within(results()).getByRole('listitem')).toHaveTextContent('one.gif');
+    expect(screen.getByRole('tab', { name: /^Exports/ })).toHaveTextContent('Exports1');
   });
 
   test('an output moved away since it was made says so when opened', async () => {

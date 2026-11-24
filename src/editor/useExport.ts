@@ -126,7 +126,8 @@ export function useExport() {
     if (!settled || settled.has(output.fileType)) return;
     settled.add(output.fileType);
     const result = toResult(output);
-    if (result) setResults((current) => [...current, result]);
+    // Newest first, as the Exports tab lists them.
+    if (result) setResults((current) => [result, ...current]);
     setJob((current) => {
       if (!current) return current;
       const job = { ...current, settled: { ...current.settled, [output.fileType]: output } };

@@ -2,7 +2,7 @@
 // settings-number tests of discordgifs-advanced-commands.test.ts. Dropped with what they covered:
 // the large-file warning and frame-memory limits (ffmpeg.wasm's), the mode switch (simple mode is
 // not in v0), and the ffmpeg command tests (export builds commands in Rust). Exporting, its
-// progress and Made this session are tested in export.test.tsx.
+// progress and the This session list are tested in export.test.tsx.
 import { act, fireEvent, screen, within } from '@testing-library/react';
 
 import Editor from '../Editor';
@@ -79,10 +79,10 @@ describe('Output settings', () => {
     expect(screen.getAllByRole('button', { name: /^Close / })).toHaveLength(1);
   });
 
-  test('exports the ticked file types, with Made this session empty until something is made', async () => {
+  test('exports the ticked file types, with This session empty until something is made', async () => {
     const { request } = renderSourceEditor({ info: sourceInfo() });
     fireEvent.click(screen.getByRole('tab', { name: /^Exports/ }));
-    const results = screen.getByRole('region', { name: 'Made this session' });
+    const results = screen.getByRole('region', { name: 'This session' });
     expect(within(results).getByText(/Nothing yet/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('tab', { name: 'Output' }));
 

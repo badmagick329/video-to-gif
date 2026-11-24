@@ -1,34 +1,48 @@
 import { useState } from 'react';
 
 import { isOutputError, openOutput, showOutputInFolder } from '../ipc/export';
+import { sourceFolder } from './useDestination';
 import { SessionResult } from './lib/types';
 import { fileTypeInfo, formatBytes } from './lib/output-settings';
 
 /**
- * Gif Studio's *Made this session* list, as mgck shows it. Each output plays
- * in place through the asset protocol, and Open and Show in folder take the
- * place of mgck's Download link, since the file is already on disk.
+ * The Exports tab's *This session* list: every output this session made, newest first, and every
+ * file type that failed. Each output shows a thumbnail drawn from its file, its name, then format,
+ * pixel size and bytes, with Open and Show in folder. It belongs to the window, not the clip, so
+ * opening another video keeps it.
  */
 export default function SessionResults({
   results,
 }: {
+  /** Newest first. */
   results: readonly SessionResult[];
 }) {
+  const newest = results.find((result) => !('failed' in result));
   return (
-    <section aria-labelledby='session-results' className='flex flex-col gap-2'>
-      <h3 id='session-results' className='text-sm font-semibold'>
-        Made this session
+    <section aria-labelledby='session-results' className='flex flex-col gap-1.5'>
+      <h3
+        id='session-results'
+        className='flex justify-between gap-3 text-xs font-semibold uppercase tracking-[.07em] text-dim'
+      >
+        This session
+        {newest && 'path' in newest && (
+          // Where the latest output went; usually where the rest did too.
+          <span
+            className='min-w-0 truncate font-normal normal-case tracking-normal'
+            title={sourceFolder(newest.path)}
+          >
+            {sourceFolder(newest.path)}
+          </span>
+        )}
       </h3>
       {results.length === 0 ? (
-        <p className='text-sm text-fg/60'>
-          Nothing yet. Your files show up here.
-        </p>
+        <p className='text-md text-dim'>Nothing yet. Your files show up here.</p>
       ) : (
-        <ul className='flex flex-col gap-2'>
+        <ul className='flex flex-col gap-0.5'>
           {results.map((result) => (
             <li
               key={result.id}
-              className='flex flex-col gap-2 rounded-md border border-fg/15 p-2'
+              className='grid grid-cols-[56px_minmax(0,1fr)] gap-2.5 rounded-lg p-2 hover:bg-raised'
             >
               {'failed' in result ? (
                 <FailedRow result={result} />
@@ -49,14 +63,22 @@ function FailedRow({
   result: Extract<SessionResult, { failed: true }>;
 }) {
   return (
-    <div className='flex flex-col gap-1 text-left'>
-      <p className='text-sm font-semibold text-danger'>
-        {fileTypeInfo[result.fileType].label} conversion failed
-      </p>
-      {result.reason && (
-        <ErrorDetails summary="ffmpeg's error" details={result.reason} />
-      )}
-    </div>
+    <>
+      <div
+        aria-hidden
+        className='grid h-[62px] w-14 place-items-center rounded bg-danger/10 text-lg font-semibold text-danger'
+      >
+        !
+      </div>
+      <div className='flex min-w-0 flex-col gap-1'>
+        <p className='text-md font-medium text-danger'>
+          {fileTypeInfo[result.fileType].label} failed
+        </p>
+        {result.reason && (
+          <ErrorDetails summary="ffmpeg's error" details={result.reason} />
+        )}
+      </div>
+    </>
   );
 }
 
@@ -104,62 +126,57 @@ function OutputRow({
       setProblem(actionProblem(error, result.name))
     );
   };
+  const button =
+    'inline-flex h-6 items-center rounded-[5px] border border-line-strong bg-control px-2 text-[11.5px] hover:bg-control-hover';
+  const thumbnail = 'block h-[62px] w-14 rounded bg-black object-cover';
 
   return (
     <>
-      <div className='flex items-center gap-3'>
-        <div className='grid h-20 w-28 shrink-0 place-items-center overflow-hidden rounded bg-black'>
-          {result.fileType === 'mp4' ? (
-            <video
-              src={result.url}
-              aria-label={`${label} preview`}
-              className='max-h-full max-w-full'
-              autoPlay
-              loop
-              muted
-              playsInline
-            />
-          ) : (
-            <img
-              src={result.url}
-              alt={`${label} preview`}
-              className='max-h-full max-w-full'
-            />
-          )}
-        </div>
-        <div className='flex min-w-0 grow flex-col gap-1 text-left'>
-          <p className='truncate text-sm' title={result.path}>
-            {result.name}
-          </p>
-          <p className='text-xs text-fg/70'>
-            <span className='font-semibold text-fg'>{label}</span> ·{' '}
-            {result.width} × {result.height} · {formatBytes(result.size)}
-          </p>
-        </div>
-      </div>
-      <div className='flex gap-2'>
-        <button
-          type='button'
-          className='rounded-md bg-accent px-3 py-1.5 text-sm font-semibold text-accent-fg hover:bg-accent-hover'
-          aria-label={`Open ${result.name}`}
-          onClick={act(openOutput)}
-        >
-          Open
-        </button>
-        <button
-          type='button'
-          className='rounded-md border border-fg/25 px-3 py-1.5 text-sm hover:bg-fg/10'
-          aria-label={`Show ${result.name} in folder`}
-          onClick={act(showOutputInFolder)}
-        >
-          Show in folder
-        </button>
-      </div>
-      {problem && (
-        <p role='alert' className='text-xs text-danger'>
-          {problem}
-        </p>
+      {result.fileType === 'mp4' ? (
+        // The first frame stands still as the thumbnail.
+        <video
+          src={result.url}
+          aria-label={`${label} preview`}
+          className={thumbnail}
+          preload='metadata'
+          muted
+          playsInline
+        />
+      ) : (
+        <img src={result.url} alt={`${label} preview`} className={thumbnail} />
       )}
+      <div className='min-w-0'>
+        <p className='truncate text-md' title={result.path}>
+          {result.name}
+        </p>
+        <p className='mt-0.5 text-[11.5px] text-muted'>
+          {label} · {result.width} × {result.height} ·{' '}
+          <span className='font-mono text-fg-label'>{formatBytes(result.size)}</span>
+        </p>
+        <div className='mt-1.5 flex flex-wrap gap-1'>
+          <button
+            type='button'
+            className={button}
+            aria-label={`Open ${result.name}`}
+            onClick={act(openOutput)}
+          >
+            Open
+          </button>
+          <button
+            type='button'
+            className={button}
+            aria-label={`Show ${result.name} in folder`}
+            onClick={act(showOutputInFolder)}
+          >
+            Show in folder
+          </button>
+        </div>
+        {problem && (
+          <p role='alert' className='mt-1 text-xs text-danger'>
+            {problem}
+          </p>
+        )}
+      </div>
     </>
   );
 }
