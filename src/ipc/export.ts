@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core';
+import { Channel, invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 
 import type { AdvancedSettings, FileType } from '../editor/lib/advanced';
@@ -6,7 +6,7 @@ import type { ClipCrop, ClipTrim, ExportRequest } from '../editor/lib/types';
 import type { SourceInfo } from './probe';
 
 // Mirrors of the export slice's IPC types in src-tauri/src/export/domain/ (outcome.rs, memory.rs,
-// plan.rs); change them together. `ExportRequest` lives with the editor, which builds it.
+// estimate.rs, plan.rs); change them together. `ExportRequest` lives with the editor, which builds it.
 
 /** One ticked file type's result. Failed and cancelled outputs leave no file behind. */
 export type ExportOutput =
@@ -76,6 +76,41 @@ export function runExport(
 /** Stops the running export; its remaining outputs settle as `cancelled`. */
 export function cancelExport(): Promise<void> {
   return invoke<void>('cancel_export');
+}
+
+/** One file type's size estimate (`export/domain/estimate.rs`). */
+export type SizeEstimate =
+  | {
+      status: 'done';
+      fileType: FileType;
+      /** Expected bytes of the exported file. */
+      bytes: number;
+    }
+  /** A sample failed, or encoding the whole selection would not fit in free memory. */
+  | { status: 'failed'; fileType: FileType; reason: string }
+  /** A newer estimate, `cancelSizeEstimate` or an export stopped it. */
+  | { status: 'cancelled'; fileType: FileType };
+
+/**
+ * Estimates each ticked file type's size by encoding samples of `request` in the background,
+ * calling `onEstimate` as each settles. Resolves with all of them. Starting one cancels the
+ * running one. Rejects with an ExportError for an impossible request, or `busy` during an export.
+ */
+export function estimateOutputSize(
+  request: ExportRequest,
+  onEstimate: (estimate: SizeEstimate) => void
+): Promise<SizeEstimate[]> {
+  const channel = new Channel<SizeEstimate>();
+  channel.onmessage = onEstimate;
+  return invoke<SizeEstimate[]>('estimate_output_size', {
+    request,
+    onEstimate: channel,
+  });
+}
+
+/** Stops the running size estimate, if any. */
+export function cancelSizeEstimate(): Promise<void> {
+  return invoke<void>('cancel_size_estimate');
 }
 
 /** Rejects with an ExportError (`invalidRequest`) for an impossible request. */

@@ -18,6 +18,11 @@ export const tauri = {
   commands: {} as Record<string, Handler>,
 };
 
+/** Tauri's IPC channel: a command handler sends to it by calling `onmessage`. */
+class Channel<T> {
+  onmessage: (message: T) => void = () => {};
+}
+
 export const core = {
   invoke: vi.fn(async (command: string, args?: Args) => {
     const handler = tauri.commands[command];
@@ -25,7 +30,31 @@ export const core = {
     return handler(args ?? {});
   }),
   convertFileSrc: (path: string) => `asset://${path}`,
+  Channel,
 };
+
+/** The commands a test has invoked, by name, in order. */
+export function invoked(command: string) {
+  return core.invoke.mock.calls.filter(([name]) => name === command);
+}
+
+/**
+ * A size estimate that answers at once: `bytes` for each requested file type, sent on the
+ * channel as Rust does and resolved with.
+ */
+export function estimateAnswers(bytes: Record<string, number>) {
+  return async (args: Args) => {
+    const request = args.request as { settings: { fileTypes: string[] } };
+    const channel = args.onEstimate as Channel<unknown>;
+    const estimates = request.settings.fileTypes.map((fileType) => ({
+      status: 'done',
+      fileType,
+      bytes: bytes[fileType] ?? 0,
+    }));
+    estimates.forEach((estimate) => channel.onmessage(estimate));
+    return estimates;
+  };
+}
 
 export const event = {
   listen: vi.fn(async (name: string, handler: Listener) => {
@@ -114,6 +143,8 @@ export function clipBackend(
     make_thumbnails: () => new Promise(() => {}),
     saved_destination: async () => null,
     estimate_export_memory: async () => memoryFits,
+    estimate_output_size: estimateAnswers({}),
+    cancel_size_estimate: async () => {},
   });
 }
 

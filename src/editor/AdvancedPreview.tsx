@@ -1,8 +1,16 @@
 
 import { ClipCrop } from './lib/types';
 import { Size } from './lib/output-preview';
-import { AdvancedSettings, formatSpeed } from './lib/advanced';
+import {
+  AdvancedSettings,
+  FileType,
+  fileTypeInfo,
+  fileTypeOrder,
+  formatBytes,
+  formatSpeed,
+} from './lib/advanced';
 import OutputPreview from './OutputPreview';
+import type { FileTypeEstimate } from './useSizeEstimate';
 
 /** Fits the 390 px phone's settings column, the narrowest it gets. */
 const previewBox = 300;
@@ -25,6 +33,8 @@ export default function AdvancedPreview({
   size,
   seconds,
   frames,
+  estimates,
+  playing,
 }: {
   video: HTMLVideoElement | null;
   crop?: ClipCrop;
@@ -42,6 +52,10 @@ export default function AdvancedPreview({
   size: Size | null;
   seconds: number | null;
   frames: number | null;
+  /** Each ticked file type's size estimate. */
+  estimates: Partial<Record<FileType, FileTypeEstimate>>;
+  /** Estimates wait while the video plays. */
+  playing: boolean;
 }) {
   return (
     <figure
@@ -91,8 +105,83 @@ export default function AdvancedPreview({
             </span>
           )}
           {frames !== null && <span className={pill}>{frames} frames</span>}
+          {fileTypeOrder.map((type) => {
+            const estimate = estimates[type];
+            return (
+              estimate && (
+                <SizePill key={type} fileType={type} estimate={estimate} />
+              )
+            );
+          })}
         </div>
       )}
+      {size && <EstimateNote estimates={estimates} playing={playing} />}
     </figure>
   );
+}
+
+/**
+ * One file type's expected size. The figure is the whole message: no limit or judgement. While
+ * a newer estimate runs, the old figure stays, greyed, rather than blanking.
+ */
+function SizePill({
+  fileType,
+  estimate,
+}: {
+  fileType: FileType;
+  estimate: FileTypeEstimate;
+}) {
+  const label = fileTypeInfo[fileType].label;
+  switch (estimate.state) {
+    case 'estimating':
+      return (
+        <span className={pill}>
+          {label}{' '}
+          <span
+            role='img'
+            aria-label='Estimating'
+            className='inline-block h-2.5 w-12 animate-pulse rounded-sm bg-foreground-dg/20 align-middle'
+          />
+        </span>
+      );
+    case 'failed':
+      return (
+        <span className={pill} title={estimate.reason}>
+          {label} size unknown
+        </span>
+      );
+    case 'ready':
+    case 'stale':
+      return (
+        <span
+          className={pill}
+          aria-label={`${label} about ${formatBytes(estimate.bytes)}${estimate.state === 'stale' ? ', updating' : ''}`}
+        >
+          {label}{' '}
+          <b className={estimate.state === 'stale' ? 'text-foreground-dg/40' : undefined}>
+            ≈ {formatBytes(estimate.bytes)}
+          </b>
+        </span>
+      );
+  }
+}
+
+/** What the size figures are and whether they are up to date. */
+function EstimateNote({
+  estimates,
+  playing,
+}: {
+  estimates: Partial<Record<FileType, FileTypeEstimate>>;
+  playing: boolean;
+}) {
+  const states = Object.values(estimates).map((estimate) => estimate.state);
+  if (states.length === 0) return null;
+  const pending = states.some(
+    (state) => state === 'estimating' || state === 'stale'
+  );
+  let text = 'Sizes come from samples of this selection, so expect some drift.';
+  if (pending && playing) text = 'Sizes update when the video stops.';
+  else if (states.includes('stale')) text = 'Updating sizes…';
+  else if (pending) text = 'Encoding short samples of the selection…';
+  return <p className='text-xs text-foreground-dg/60'>{text}</p>;
 }

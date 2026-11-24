@@ -9,6 +9,7 @@ import { hasAudio } from '../ipc/probe';
 import type { Destination } from './useDestination';
 import type { ExportJob, ExportNotice } from './useExport';
 import { useMemoryEstimate } from './useMemoryEstimate';
+import { usePlaying, useSizeEstimate } from './useSizeEstimate';
 import { fileName, type OpenSource } from './useSource';
 import { useClipShortcuts } from './useClipShortcuts';
 import VideoTrimmer from './VideoTrimmer';
@@ -109,6 +110,12 @@ export default function AdvancedEditor({
   const seconds = outputSeconds(selectionSeconds, settings);
   const frames = frameCount(seconds, settings.fps);
   const memory = useMemoryEstimate({ info, trim, crop, settings });
+  const playing = usePlaying(video);
+  // Estimates are background work: they wait while the video plays or an export runs.
+  const estimates = useSizeEstimate(
+    { path, info, trim, crop, settings, size },
+    playing || converting
+  );
   // The engine refuses a run whose held frames exceed free memory; say so before Convert.
   const tooBig = memory !== null && !memory.fits;
   const canConvert =
@@ -217,6 +224,8 @@ export default function AdvancedEditor({
           size={size}
           seconds={seconds}
           frames={frames}
+          estimates={estimates}
+          playing={playing}
         />
         {/* A fieldset defaults to min-width: min-content, so without min-w-0
             wide settings rows push past the column instead of shrinking. */}
