@@ -23,9 +23,11 @@ tauri-plugin-dialog = "2.8.4"
 # the plugin is not registered, so the webview gets none of its commands.
 tauri-plugin-opener = "2.7.3"
 
+[target.'cfg(windows)'.dependencies]
+# Opens the clipboard and hands it Copy's `CF_HDROP` bytes, which the export slice builds itself.
+clipboard-win = "5.4.3"
 # Windows APIs std does not wrap: free physical memory for the export's frame-memory guard, and a
 # rename that refuses to replace an existing output. Already in the tree through Tauri.
-[target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61.2", features = [
     "Win32_Storage_FileSystem",
     "Win32_System_SystemInformation",

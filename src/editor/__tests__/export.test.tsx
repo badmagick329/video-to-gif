@@ -75,6 +75,7 @@ async function openEditor(commands: Record<string, (args: Record<string, unknown
   Object.assign(tauri.commands, {
     open_output: async () => {},
     show_output_in_folder: async () => {},
+    copy_output: async () => {},
     remember_destination: async () => {},
     cancel_export: async () => {},
     ...commands,
@@ -283,7 +284,7 @@ describe('Running card', () => {
 });
 
 describe('This session', () => {
-  test('Open and Show in folder send Rust the output’s own path', async () => {
+  test('Open, Show in folder and Copy send Rust the output’s own path', async () => {
     await openEditor();
     const run = heldExport();
     await runExport();
@@ -292,8 +293,29 @@ describe('This session', () => {
     showTab('Exports');
     fireEvent.click(screen.getByRole('button', { name: 'Open one.gif' }));
     fireEvent.click(screen.getByRole('button', { name: 'Show one.gif in folder' }));
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Copy one.gif' })));
     expect(invoked('open_output')).toEqual([{ path: 'C:\\videos\\one.gif' }]);
     expect(invoked('show_output_in_folder')).toEqual([{ path: 'C:\\videos\\one.gif' }]);
+    expect(invoked('copy_output')).toEqual([{ path: 'C:\\videos\\one.gif' }]);
+    // The button confirms the copy for a moment.
+    expect(screen.getByRole('button', { name: 'Copy one.gif' })).toHaveTextContent('Copied');
+  });
+
+  test('a busy clipboard says so', async () => {
+    await openEditor({
+      copy_output: async () => {
+        throw { kind: 'clipboardFailed', reason: 'Access is denied.' };
+      },
+    });
+    const run = heldExport();
+    await runExport();
+    await run.finish([done('gif')]);
+    showTab('Exports');
+    fireEvent.click(screen.getByRole('button', { name: 'Copy one.gif' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'The clipboard is busy or refused the file: Access is denied.'
+    );
+    expect(screen.getByRole('button', { name: 'Copy one.gif' })).toHaveTextContent('Copy');
   });
 
   test('opening a different video keeps the list', async () => {

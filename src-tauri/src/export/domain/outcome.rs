@@ -98,7 +98,7 @@ impl fmt::Display for ExportError {
 
 impl std::error::Error for ExportError {}
 
-/// Why Open or Show in folder refused a path. Serialized with a `kind` tag.
+/// Why Open, Show in folder or Copy refused a path. Serialized with a `kind` tag.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(
     tag = "kind",
@@ -106,13 +106,15 @@ impl std::error::Error for ExportError {}
     rename_all_fields = "camelCase"
 )]
 pub enum OutputError {
-    /// Not an output this session made. Open and Show in folder act only on those, so the webview
-    /// cannot ask the shell to open an arbitrary path.
+    /// Not an output this session made. Open, Show in folder and Copy act only on those, so the
+    /// webview cannot ask the shell to open, or the clipboard to hand out, an arbitrary path.
     NotAnOutput { path: String },
     /// This session made it, but it has since been moved or deleted.
     Missing { path: String },
     /// The shell refused to open or show it.
     ShellFailed { reason: String },
+    /// The clipboard could not be opened or written, usually because another program held it.
+    ClipboardFailed { reason: String },
 }
 
 /// Why a folder could not be remembered as the destination. Serialized with a `kind` tag.

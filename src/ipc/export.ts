@@ -143,7 +143,8 @@ export function isExportError(error: unknown): error is ExportError {
 export type OutputError =
   | { kind: 'notAnOutput'; path: string }
   | { kind: 'missing'; path: string }
-  | { kind: 'shellFailed'; reason: string };
+  | { kind: 'shellFailed'; reason: string }
+  | { kind: 'clipboardFailed'; reason: string };
 
 export type DestinationError =
   | { kind: 'notFound'; path: string }
@@ -160,6 +161,14 @@ export function openOutput(path: string): Promise<void> {
 /** Opens Explorer on the output's folder with the output selected; rejects like openOutput. */
 export function showOutputInFolder(path: string): Promise<void> {
   return invoke<void>('show_output_in_folder', { path });
+}
+
+/**
+ * Puts the output on the Windows clipboard as a file, so it pastes into an Explorer folder or a
+ * chat app; rejects like openOutput, or with `clipboardFailed`.
+ */
+export function copyOutput(path: string): Promise<void> {
+  return invoke<void>('copy_output', { path });
 }
 
 /**

@@ -2,8 +2,8 @@
 //! part in the app's startup and exit.
 //!
 //! Each finished output is added to the asset protocol's scope as it is made, so the results list
-//! can play it, and to [`SessionOutputs`], so Open and Show in folder accept it. Nothing else the
-//! export touches becomes readable.
+//! can play it, and to [`SessionOutputs`], so Open, Show in folder and Copy accept it. Nothing
+//! else the export touches becomes readable.
 
 use std::error::Error;
 use std::path::{Path, PathBuf};
@@ -18,6 +18,7 @@ use crate::export::domain::estimate::SizeEstimate;
 use crate::export::domain::memory::MemoryEstimate;
 use crate::export::domain::outcome::{DestinationError, ExportError, ExportOutput, OutputError};
 use crate::export::domain::plan::{ExportRequest, MemoryRequest};
+use crate::export::infrastructure::clipboard;
 use crate::export::infrastructure::destination::{self, SavedDestination};
 use crate::export::infrastructure::memory;
 use crate::search_path::SearchPath;
@@ -228,6 +229,22 @@ pub async fn show_output_in_folder(
 ) -> Result<(), OutputError> {
     let path = outputs.check(&path)?;
     shell(move || tauri_plugin_opener::reveal_item_in_dir(path)).await
+}
+
+/// Puts an output this session made on the clipboard as a file (`CF_HDROP`), so it pastes into an
+/// Explorer folder as a copy and into chat apps as an attachment.
+#[tauri::command]
+pub async fn copy_output(
+    outputs: State<'_, SessionOutputs>,
+    path: String,
+) -> Result<(), OutputError> {
+    // The checked path is the string sent, byte for byte; the clipboard gets that string.
+    outputs.check(&path)?;
+    // Opening a clipboard another program holds is retried with short sleeps.
+    tauri::async_runtime::spawn_blocking(move || clipboard::copy_files(&[&path]))
+        .await
+        .expect("clipboard task panicked")
+        .map_err(|reason| OutputError::ClipboardFailed { reason })
 }
 
 /// Runs a shell call off the async runtime's workers: it initialises COM and may wait on Explorer.

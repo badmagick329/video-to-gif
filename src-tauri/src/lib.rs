@@ -40,6 +40,7 @@ pub fn run() {
             export::presentation::remember_destination,
             export::presentation::open_output,
             export::presentation::show_output_in_folder,
+            export::presentation::copy_output,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

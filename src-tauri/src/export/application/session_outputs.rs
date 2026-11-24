@@ -1,4 +1,4 @@
-//! The outputs this session has made, so Open and Show in folder act only on those.
+//! The outputs this session has made, so Open, Show in folder and Copy act only on those.
 //!
 //! The paths come back from the webview, which is a trust boundary: without this check any script
 //! in it could ask the shell to open an arbitrary file. A path is accepted only when it is, byte
