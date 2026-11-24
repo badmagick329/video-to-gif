@@ -1,4 +1,4 @@
-import type { AdvancedSettings } from './advanced';
+import type { OutputSettings } from './output-settings';
 import type { Size } from './output-preview';
 
 /**
@@ -8,9 +8,9 @@ import type { Size } from './output-preview';
  */
 const antonFamily = 'Anton';
 
-/** Advanced mode's meme-style captions, as the settings hold them. */
+/** The meme-style captions, as the output settings hold them. */
 export type Captions = Pick<
-  AdvancedSettings,
+  OutputSettings,
   'topText' | 'bottomText' | 'captionSize'
 >;
 

@@ -1,7 +1,7 @@
 //! What an export will do, checked: the [`ExportRequest`] the frontend sends, validated into an
 //! [`ExportPlan`] whose numbers the argument builder and the runner trust. Also mgck's size and
-//! naming helpers from `advanced.ts` (`croppedSourceSize`, `outputSize`, `evenDown`,
-//! `outputSeconds`, `singlePassDownloadName`).
+//! naming helpers (`croppedSourceSize`, `outputSize`, `evenDown`, `outputSeconds`,
+//! `singlePassDownloadName`); the frontend's `output-settings.ts` mirrors the size ones.
 
 use std::path::PathBuf;
 

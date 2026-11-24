@@ -1,4 +1,4 @@
-//! Advanced mode's output settings, ported from mgck's `AdvancedSettings` (`advanced.ts`).
+//! The output settings, ported from mgck's `AdvancedSettings`; the frontend's `OutputSettings`.
 //!
 //! [`SettingsInput`] is the shape the frontend sends; [`Settings`] is the same choices after
 //! [`SettingsInput::clamp`] has pulled every number into mgck's `settingLimits`, which is the only
@@ -153,7 +153,7 @@ pub const SPEED_RANGE: (f64, f64) = (0.25, 3.0);
 /// `atempo` keeps sound in step only between these speeds.
 pub const SOUND_SPEED_RANGE: (f64, f64) = (0.5, 2.0);
 
-/// The settings as the frontend sends them (`AdvancedSettings` in `src/editor/lib/advanced.ts`).
+/// The settings as the frontend sends them (`OutputSettings` in `src/editor/lib/output-settings.ts`).
 ///
 /// The caption text and size are not read: captions arrive already drawn, as a PNG
 /// (`ExportRequest.captions`), so serde ignores those fields.
@@ -245,7 +245,7 @@ mod tests {
 
     use super::*;
 
-    /// mgck's `defaultAdvancedSettings`, as the frontend serializes it.
+    /// The frontend's `defaultOutputSettings` (mgck's `defaultAdvancedSettings`), as it serializes it.
     fn defaults() -> serde_json::Value {
         json!({
             "width": 480,

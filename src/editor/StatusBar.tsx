@@ -1,7 +1,7 @@
 import type { MemoryEstimate } from '../ipc/export';
 import type { Tool } from '../ipc/probe';
 import type { Preview } from './useSource';
-import { formatBytes } from './lib/advanced';
+import { formatBytes } from './lib/output-settings';
 
 /**
  * The window's bottom row: the ffmpeg the startup check found, what the player plays, the

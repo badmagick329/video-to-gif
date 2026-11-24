@@ -34,7 +34,7 @@
     "copyright": "Copyright (c) 2026 mgck",
     "category": "Video",
     "shortDescription": "Turn videos into GIF, WebP and MP4 with your own ffmpeg",
-    "longDescription": "A desktop app that turns a video into GIF, WebP or MP4 by running the ffmpeg and ffprobe on your PATH. It reproduces the advanced mode of mgck's Discord GIF tool.",
+    "longDescription": "A desktop app that turns a video into GIF, WebP or MP4 by running the ffmpeg and ffprobe on your PATH. Trim, crop, resize, change speed and direction, and add captions, then see each file's size before you export.",
     "windows": {
       "webviewInstallMode": {
         "type": "downloadBootstrapper",

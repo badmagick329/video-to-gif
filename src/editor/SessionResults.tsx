@@ -2,7 +2,7 @@ import { useState } from 'react';
 
 import { isOutputError, openOutput, showOutputInFolder } from '../ipc/export';
 import { SessionResult } from './lib/types';
-import { fileTypeInfo, formatBytes } from './lib/advanced';
+import { fileTypeInfo, formatBytes } from './lib/output-settings';
 
 /**
  * Gif Studio's *Made this session* list, as mgck shows it. Each output plays

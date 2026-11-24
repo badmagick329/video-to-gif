@@ -1,7 +1,7 @@
 import { Channel, invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 
-import type { AdvancedSettings, FileType } from '../editor/lib/advanced';
+import type { OutputSettings, FileType } from '../editor/lib/output-settings';
 import type { ClipCrop, ClipTrim, ExportRequest } from '../editor/lib/types';
 import type { SourceInfo } from './probe';
 
@@ -46,7 +46,7 @@ export type MemoryRequest = {
   info: SourceInfo;
   trim?: ClipTrim;
   crop?: ClipCrop;
-  settings: AdvancedSettings;
+  settings: OutputSettings;
 };
 
 export type MemoryEstimate = {

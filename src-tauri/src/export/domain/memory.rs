@@ -1,5 +1,5 @@
 //! The frame-memory guard, ported from mgck's `heldCopies` and `frameMemoryLimitSeconds`
-//! (`advanced.ts`). mgck checked against a fixed budget measured for ffmpeg.wasm's 2 GiB heap;
+//! (in its `advanced.ts`). mgck checked against a fixed budget measured for ffmpeg.wasm's 2 GiB heap;
 //! here the budget is the machine's free physical memory, read when the estimate is asked for.
 //! Native ffmpeg does not stall at a heap limit, but a run that outgrows free RAM pages the whole
 //! machine to disk for minutes, so the UI warns before such a run and `run_export` refuses it unless

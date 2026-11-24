@@ -202,7 +202,7 @@ describe('caption drawing', () => {
   });
 });
 
-describe('Advanced mode captions', () => {
+describe('Captions', () => {
   let recorders: WeakMap<
     HTMLCanvasElement,
     ReturnType<typeof recordingContext>

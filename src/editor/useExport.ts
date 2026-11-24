@@ -10,7 +10,7 @@ import {
 } from '../ipc/export';
 import { fileUrl } from '../ipc/preview';
 import { fileName } from './useSource';
-import { fileTypeInfo, formatBytes, type FileType } from './lib/advanced';
+import { fileTypeInfo, formatBytes, type FileType } from './lib/output-settings';
 import type { ExportRequest, SessionResult } from './lib/types';
 
 /** mgck's `Job`: the running export, for its per-file-type progress bar. */

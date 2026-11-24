@@ -14,10 +14,10 @@ import { fileName, useSource } from './useSource';
 import { useClipShortcuts } from './useClipShortcuts';
 import type { Tool } from '../ipc/probe';
 import {
-  AdvancedSettings,
-  defaultAdvancedSettings,
+  OutputSettings,
+  defaultOutputSettings,
   forNewClip,
-} from './lib/advanced';
+} from './lib/output-settings';
 import { ClipCrop, ClipTrim } from './lib/types';
 
 /**
@@ -27,8 +27,8 @@ import { ClipCrop, ClipTrim } from './lib/types';
  * `useExport`, and where they are saved from `useDestination`.
  */
 export default function Editor({ ffmpeg }: { ffmpeg: Tool }) {
-  const [settings, setSettings] = useState<AdvancedSettings>(
-    defaultAdvancedSettings
+  const [settings, setSettings] = useState<OutputSettings>(
+    defaultOutputSettings
   );
   const [edit, setEdit] = useState<{ trim?: ClipTrim; crop?: ClipCrop }>({});
   const [shortcutsOpen, setShortcutsOpen] = useState(false);

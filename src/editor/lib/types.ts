@@ -1,7 +1,7 @@
 // The editor's shared types, from mgck's `lib/types/discordgifs.ts`, less its simple-mode and
 // ffmpeg.wasm types.
 import type { SourceInfo } from '../../ipc/probe';
-import type { AdvancedSettings, FileType } from './advanced';
+import type { OutputSettings, FileType } from './output-settings';
 
 export type ClipTrim = { start: number; end: number };
 /**
@@ -35,7 +35,7 @@ export type SessionResult =
  * What the Export button asks for: mgck's single-pass job, with the source as a path and its
  * probed info. Rust's `export::domain::plan::ExportRequest` mirrors it; change them together.
  * Rust works out the output size and length from `info`, the crop and the settings itself, with
- * the same functions as `advanced.ts`, and refuses captions drawn at any other size.
+ * the same functions as `output-settings.ts`, and refuses captions drawn at any other size.
  */
 export type ExportRequest = {
   path: string;
@@ -44,7 +44,7 @@ export type ExportRequest = {
   trim?: ClipTrim;
   crop?: ClipCrop;
   /** `fileTypes` in `fileTypeOrder`. Caption text and size are not read: `captions` carries them. */
-  settings: AdvancedSettings;
+  settings: OutputSettings;
   keepSound: boolean;
   /** The captions as a transparent PNG at the exact output size, when there are any. */
   captions?: Uint8Array;

@@ -14,7 +14,7 @@ import {
   fitToBox,
   upright,
 } from './lib/output-preview';
-import { isSideways, orientedSize } from './lib/advanced';
+import { isSideways, orientedSize } from './lib/output-settings';
 import {
   captionFontsLoaded,
   loadCaptionFonts,
@@ -47,9 +47,9 @@ export default function OutputPreview({
 }: {
   video: HTMLVideoElement | null;
   crop?: ClipCrop;
-  /** Advanced mode's rotate and flips; the presets stay upright. */
+  /** The output's rotate and flips; upright when left out. */
   orientation?: Orientation;
-  /** Advanced mode's captions, fitted to the exact output size. */
+  /** The output's captions, fitted to the exact output size. */
   captions?: CaptionLayer;
   /** Side of the square CSS box the output is shown in. */
   box: number;

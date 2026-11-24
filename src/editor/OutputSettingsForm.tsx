@@ -4,7 +4,7 @@ import { LuChevronRight, LuRotateCcw, LuRotateCw } from 'react-icons/lu';
 import { Switch } from './Switch';
 import { Segmented } from './Viewer';
 import {
-  AdvancedSettings,
+  OutputSettings,
   FileType,
   clampSetting,
   directionOptions,
@@ -18,7 +18,7 @@ import {
   soundDropReason,
   speedSteps,
   widthChoices,
-} from './lib/advanced';
+} from './lib/output-settings';
 
 const mini =
   'h-6 rounded-[5px] border border-line-control px-2 text-sm text-fg-soft hover:text-fg aria-pressed:border-accent aria-pressed:bg-accent/15 aria-pressed:text-white disabled:cursor-not-allowed disabled:opacity-40';
@@ -53,8 +53,8 @@ export default function OutputSettingsForm({
   nativeWidth,
   hasAudio,
 }: {
-  settings: AdvancedSettings;
-  onChange: (settings: AdvancedSettings) => void;
+  settings: OutputSettings;
+  onChange: (settings: OutputSettings) => void;
   /** The width the file will have, after capping. */
   outputWidth: number | null;
   outputHeight: number | null;
@@ -63,7 +63,7 @@ export default function OutputSettingsForm({
   /** From the probe, so it holds for the source whether the player shows it or a proxy. */
   hasAudio: boolean;
 }) {
-  const update = (patch: Partial<AdvancedSettings>) =>
+  const update = (patch: Partial<OutputSettings>) =>
     onChange({ ...settings, ...patch });
   const [qualityOpen, setQualityOpen] = useState(false);
   const fpsId = useId();
@@ -414,7 +414,7 @@ export default function OutputSettingsForm({
                 value={settings.gifDither}
                 onChange={(event) =>
                   update({
-                    gifDither: event.target.value as AdvancedSettings['gifDither'],
+                    gifDither: event.target.value as OutputSettings['gifDither'],
                   })
                 }
               >

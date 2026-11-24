@@ -20,7 +20,7 @@ import {
   useViewerMode,
 } from './Viewer';
 import {
-  AdvancedSettings,
+  OutputSettings,
   croppedSourceSize,
   fileTypeOrder,
   formatSpeed,
@@ -28,7 +28,7 @@ import {
   isSideways,
   outputSeconds,
   outputSize,
-} from './lib/advanced';
+} from './lib/output-settings';
 import { hasCaptions, renderCaptionImage } from './lib/captions';
 import type { Size } from './lib/output-preview';
 import {
@@ -65,11 +65,11 @@ export default function SourceEditor({
   source: OpenSource;
   trim?: ClipTrim;
   crop?: ClipCrop;
-  settings: AdvancedSettings;
+  settings: OutputSettings;
   results: readonly SessionResult[];
   /** The frame-memory estimate for this selection, crop and settings. */
   memory: MemoryEstimate | null;
-  onSettingsChange: (settings: AdvancedSettings) => void;
+  onSettingsChange: (settings: OutputSettings) => void;
   onTrimChange: (trim: ClipTrim | undefined) => void;
   onCropChange: (crop: ClipCrop | undefined) => void;
   onUnplayable: () => void;

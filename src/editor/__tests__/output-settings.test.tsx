@@ -7,9 +7,9 @@ import { act, fireEvent, screen, within } from '@testing-library/react';
 
 import Editor from '../Editor';
 import {
-  AdvancedSettings,
+  OutputSettings,
   croppedSourceSize,
-  defaultAdvancedSettings,
+  defaultOutputSettings,
   forNewClip,
   frameCount,
   outputSeconds,
@@ -17,7 +17,7 @@ import {
   rotate,
   soundDropReason,
   speedSteps,
-} from '../lib/advanced';
+} from '../lib/output-settings';
 import { renderSourceEditor } from './harness';
 import {
   clipBackend,
@@ -38,8 +38,8 @@ vi.mock('@tauri-apps/api/event', async () => (await import('./tauri')).event);
 vi.mock('@tauri-apps/api/webview', async () => (await import('./tauri')).webview);
 vi.mock('@tauri-apps/plugin-dialog', async () => (await import('./tauri')).dialog);
 
-const settings = (patch: Partial<AdvancedSettings> = {}): AdvancedSettings => ({
-  ...defaultAdvancedSettings,
+const settings = (patch: Partial<OutputSettings> = {}): OutputSettings => ({
+  ...defaultOutputSettings,
   ...patch,
 });
 
@@ -67,7 +67,7 @@ async function openEditor(preview: 'source' | 'proxy' = 'source') {
   return view;
 }
 
-describe('Advanced mode', () => {
+describe('Output settings', () => {
   test('holds one clip: opening another replaces it', async () => {
     await openEditor();
     expect(screen.getByRole('button', { name: 'Close one.mp4' })).toBeInTheDocument();
@@ -135,7 +135,7 @@ describe('Advanced mode', () => {
 });
 
 describe.each(['source', 'proxy'] as const)(
-  'Advanced mode rotate, flip, speed and direction, playing the %s',
+  'Rotate, flip, speed and direction, playing the %s',
   (preview) => {
     test('a quarter turn swaps the output size, the preview and the crop readout', async () => {
       await openEditor(preview);
@@ -364,11 +364,11 @@ describe('rotate, flip, speed and direction numbers', () => {
   });
 });
 
-describe('Advanced mode output numbers', () => {
+describe('Output numbers', () => {
   const frame = { width: 1920, height: 1080 };
 
   test('defaults: 480 px wide, 15 fps, GIF only, 256 colours, forever', () => {
-    expect(defaultAdvancedSettings).toEqual({
+    expect(defaultOutputSettings).toEqual({
       width: 480,
       fps: 15,
       speed: 1,

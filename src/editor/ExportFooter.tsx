@@ -4,12 +4,12 @@ import type { Destination } from './useDestination';
 import type { ExportJob, ExportNotice } from './useExport';
 import type { FileTypeEstimate } from './useSizeEstimate';
 import {
-  AdvancedSettings,
+  OutputSettings,
   FileType,
   fileTypeInfo,
   fileTypeOrder,
   formatBytes,
-} from './lib/advanced';
+} from './lib/output-settings';
 import { formatClipTime } from './lib/trim';
 
 /** The Save to row's state and actions, from `useDestination`. */
@@ -38,7 +38,7 @@ export default function ExportFooter({
   onExport,
   onCancel,
 }: {
-  settings: AdvancedSettings;
+  settings: OutputSettings;
   /** Output seconds and frames, for the estimate's header. */
   seconds: number;
   frames: number;
@@ -310,7 +310,7 @@ function MemoryWarning({
   settings,
 }: {
   estimate: MemoryEstimate;
-  settings: AdvancedSettings;
+  settings: OutputSettings;
 }) {
   const { heldBytes, availableBytes, limitSeconds, fits } = estimate;
   if (heldBytes === 0 || availableBytes === null) return null;
@@ -341,7 +341,7 @@ function MemoryWarning({
 }
 
 /** What holds the frames: the direction, or else the GIF's palette pass. */
-function memoryHolder(direction: AdvancedSettings['direction']): string {
+function memoryHolder(direction: OutputSettings['direction']): string {
   if (direction === 'reverse') return 'Reverse';
   if (direction === 'boomerang') return 'Boomerang';
   return 'Making a GIF';

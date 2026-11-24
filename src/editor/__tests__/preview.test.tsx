@@ -1,6 +1,6 @@
 // Copied from mgck's __tests__/discordgifs-preview.test.tsx: the preview maths and orientation
 // tests as they are, and its redraw tests moved from simple mode's preset previews to the
-// advanced output preview, on a directly played source and on a proxy.
+// output preview, on a directly played source and on a proxy.
 import { act, fireEvent, screen } from '@testing-library/react';
 
 import Editor from '../Editor';

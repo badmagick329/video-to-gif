@@ -4,7 +4,7 @@ import { fireEvent, render } from '@testing-library/react';
 import { useState } from 'react';
 
 import SourceEditor from '../SourceEditor';
-import { defaultAdvancedSettings } from '../lib/advanced';
+import { defaultOutputSettings } from '../lib/output-settings';
 import type { ClipCrop, ClipTrim, ExportRequest } from '../lib/types';
 import type { MemoryEstimate } from '../../ipc/export';
 import type { SourceInfo } from '../../ipc/probe';
@@ -33,7 +33,7 @@ export function renderSourceEditor({
   function Harness() {
     const [trim, setTrim] = useState<ClipTrim>();
     const [crop, setCrop] = useState<ClipCrop>();
-    const [settings, setSettings] = useState(defaultAdvancedSettings);
+    const [settings, setSettings] = useState(defaultOutputSettings);
     return (
       <SourceEditor
         source={{

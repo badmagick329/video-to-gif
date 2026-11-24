@@ -1,5 +1,5 @@
 import { ClipCrop } from './types';
-import { Rotation, orientedSize } from './advanced';
+import { Rotation, orientedSize } from './output-settings';
 import { Captions, drawCaptions } from './captions';
 
 export type Size = { width: number; height: number };
@@ -81,7 +81,7 @@ export function canvasResolution(
   };
 }
 
-/** Advanced mode's rotate and flip, applied in FFmpeg's order: turn, then flip. */
+/** The output's rotate and flip, applied in FFmpeg's order: turn, then flip. */
 export type Orientation = {
   rotation: Rotation;
   flipHorizontal: boolean;

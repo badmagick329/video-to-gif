@@ -12,7 +12,7 @@ import {
   type SizeEstimate,
 } from '../ipc/export';
 import { hasAudio, type SourceInfo } from '../ipc/probe';
-import { AdvancedSettings, FileType, fileTypeOrder } from './lib/advanced';
+import { OutputSettings, FileType, fileTypeOrder } from './lib/output-settings';
 import { hasCaptions, renderCaptionImage } from './lib/captions';
 import type { Size } from './lib/output-preview';
 import type { ClipCrop, ClipTrim } from './lib/types';
@@ -37,7 +37,7 @@ export type EstimateInput = {
   info: SourceInfo;
   trim?: ClipTrim;
   crop?: ClipCrop;
-  settings: AdvancedSettings;
+  settings: OutputSettings;
   /** The exact output size, which the caption image is drawn at. */
   size: Size;
 };
@@ -77,7 +77,7 @@ export function estimateKeys(input: EstimateInput): Record<FileType, string> {
   };
 }
 
-function keepSound(settings: AdvancedSettings, info: SourceInfo): boolean {
+function keepSound(settings: OutputSettings, info: SourceInfo): boolean {
   return settings.keepSound && hasAudio(info);
 }
 

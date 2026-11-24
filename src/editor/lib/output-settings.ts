@@ -2,8 +2,8 @@ import { ClipCrop } from './types';
 import type { Size } from './output-preview';
 
 /**
- * Advanced mode's encoded output. Called "file type" because "output format"
- * already names a simple-mode preset.
+ * An encoded output's format. Called "file type" because "output format"
+ * named one of mgck's simple-mode presets.
  */
 export type FileType = 'gif' | 'webp' | 'mp4';
 
@@ -80,7 +80,7 @@ export const speedSteps = [
 const soundSpeedRange = { min: 0.5, max: 2 } as const;
 
 /** Explicit user choices. Nothing here targets a file size. */
-export type AdvancedSettings = {
+export type OutputSettings = {
   /** Output width before capping at the crop, or the crop's own width. */
   width: number | 'original';
   fps: number;
@@ -114,7 +114,7 @@ export const settingLimits = {
   captionSize: { min: 5, max: 30 },
 } as const;
 
-export const defaultAdvancedSettings: AdvancedSettings = {
+export const defaultOutputSettings: OutputSettings = {
   width: 480,
   fps: 15,
   speed: 1,
@@ -138,15 +138,15 @@ export const defaultAdvancedSettings: AdvancedSettings = {
  * since those suit one recording; width, timing, quality, speed and caption
  * size carry over.
  */
-export function forNewClip(settings: AdvancedSettings): AdvancedSettings {
+export function forNewClip(settings: OutputSettings): OutputSettings {
   return {
     ...settings,
-    direction: defaultAdvancedSettings.direction,
-    rotation: defaultAdvancedSettings.rotation,
-    flipHorizontal: defaultAdvancedSettings.flipHorizontal,
-    flipVertical: defaultAdvancedSettings.flipVertical,
-    topText: defaultAdvancedSettings.topText,
-    bottomText: defaultAdvancedSettings.bottomText,
+    direction: defaultOutputSettings.direction,
+    rotation: defaultOutputSettings.rotation,
+    flipHorizontal: defaultOutputSettings.flipHorizontal,
+    flipVertical: defaultOutputSettings.flipVertical,
+    topText: defaultOutputSettings.topText,
+    bottomText: defaultOutputSettings.bottomText,
   };
 }
 
@@ -164,7 +164,7 @@ export function isSideways(rotation: Rotation): boolean {
  * keeps it in step only between 0.5× and 2×, and nothing plays sound backward.
  */
 export function soundDropReason(
-  settings: Pick<AdvancedSettings, 'speed' | 'direction'>
+  settings: Pick<OutputSettings, 'speed' | 'direction'>
 ): string | null {
   if (settings.direction !== 'forward')
     return `No sound in ${settings.direction === 'reverse' ? 'Reverse' : 'Boomerang'}.`;
@@ -183,7 +183,7 @@ export function formatSpeed(speed: number): string {
 /** Seconds of output: speed changes the length and Boomerang doubles it. */
 export function outputSeconds(
   selectionSeconds: number,
-  settings: Pick<AdvancedSettings, 'speed' | 'direction'>
+  settings: Pick<OutputSettings, 'speed' | 'direction'>
 ): number {
   return (
     (selectionSeconds / settings.speed) *
@@ -232,7 +232,7 @@ export function orientedSize(size: Size, rotation: Rotation): Size {
  * number.
  */
 export function outputSize(
-  width: AdvancedSettings['width'],
+  width: OutputSettings['width'],
   cropped: Size,
   rotation: Rotation = 0
 ): Size & { native: number } {
