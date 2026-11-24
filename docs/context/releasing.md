@@ -27,6 +27,6 @@ The bundle settings in `tauri.conf.json` shape the user's install:
 
 ## Regenerating the icon
 
-The source is [src-tauri/icons/icon.svg](../../src-tauri/icons/icon.svg): a primary-dg orange loop arrow around a light play button on a secondary-dg tile (the `-dg` colours in [tailwind.config.js](../../tailwind.config.js) and `src/index.css`). Edit the SVG, then run `pnpm icon`. It runs `tauri icon` on the SVG, which rasterises it itself and rewrites every PNG, `icon.ico` and `icon.icns` in `src-tauri/icons/`, then deletes the `android/` and `ios/` sets it also generates, which this Windows-first app does not ship.
+The source is [src-tauri/icons/icon.svg](../../src-tauri/icons/icon.svg): an orange loop arrow around a light play button on a dark tile, drawn in the colours of mgck's old `-dg` theme, which the app replaced with the canvas palette in VTG-11 (`accent` in [tailwind.config.js](../../tailwind.config.js) is a near match for the orange). Edit the SVG, then run `pnpm icon`. It runs `tauri icon` on the SVG, which rasterises it itself and rewrites every PNG, `icon.ico` and `icon.icns` in `src-tauri/icons/`, then deletes the `android/` and `ios/` sets it also generates, which this Windows-first app does not ship.
 
 Check the 16 px layer of `icon.ico` before committing: it is what the taskbar's small views, Explorer's list view and the window's title bar show. Shapes stay thick there only if strokes stay near 100 units of the 1024 canvas, and the play button stays light so it separates from the orange loop.

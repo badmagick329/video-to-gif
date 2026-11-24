@@ -1,6 +1,6 @@
 # The editor UI is a copy of mgck's
 
-Status: Accepted (2026-11-24).
+Status: Superseded (2026-11-24) by [the editor UI is the app's own desktop layout](2026-11-24-editor-ui-from-canvas.md). The settings code copied here stays; the layout no longer follows mgck.
 
 ## Context
 

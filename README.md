@@ -1,10 +1,10 @@
 # video-to-gif
 
-A Windows desktop app that turns a video into a GIF, WebP or MP4. It reproduces the advanced mode of [mgck's Discord GIF tool](https://mgck.ink/discordgifs): trim, crop, resize, change the frame rate and speed, play forward, reversed or as a boomerang, rotate and flip, add captions, and tune GIF colours, WebP quality and MP4 sound. It can save any mix of the three formats in one run.
+A Windows desktop app that turns a video into a GIF, WebP or MP4. You can trim, crop, resize, change the frame rate and speed, play forward, reversed or as a boomerang, rotate and flip, add captions, and tune GIF colours, WebP quality and MP4 sound, then save any mix of the three formats in one run. The settings started as the advanced mode of [mgck's Discord GIF tool](https://mgck.ink/discordgifs).
 
 The browser version runs ffmpeg as WebAssembly and fails on AV1, HEVC and MKV files and on multi-GB recordings. This app runs your own ffmpeg instead, so it opens anything your ffmpeg can read, at any size, straight from where the file sits on disk.
 
-It is an early version (0.1.0) with rough edges. Before you convert, it shows roughly how big each format will be, worked out from short test encodes of your selection that run in the background. It converts, saving next to the video or in a folder you pick, and lists each file it made with buttons to open it or show it in Explorer.
+It is an early version (0.1.0) with rough edges. The window is laid out like a video editor, with the source and the output playing side by side and every setting in a panel on the right. Before you export, it shows roughly how big each format will be, worked out from short test encodes of your selection that run in the background. Export saves next to the video or in a folder you pick, and the Exports tab lists each file it made with buttons to open it or show it in Explorer.
 
 ## Requirements
 
