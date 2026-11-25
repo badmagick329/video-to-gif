@@ -8,6 +8,11 @@
 //! VTG_ESTIMATE_CLIPS="C:\a.mp4|C:\b.mov" cargo test --release estimate_accuracy -- --ignored --nocapture
 //! ```
 //!
+//! `VTG_ESTIMATE_TYPES=gif,mp4` narrows the file types, `VTG_ESTIMATE_NO_EXPORT=1` times the
+//! estimates without exporting, and `VTG_ESTIMATE_GIF_ENCODER=gifski` makes the GIFs with gifski
+//! (on PATH). Each exported GIF is also checked: its decoded frames against the frames the export
+//! encodes, its size, and its loop count (forever).
+//!
 //! It lives in the shell, beside `lib.rs`, because it needs two slices: `probe` reads each clip's
 //! source info the way the editor does, and `export` estimates and exports.
 
@@ -20,9 +25,9 @@ use tempfile::TempDir;
 
 use crate::export::application::estimate::{EstimateControl, estimate};
 use crate::export::application::{Environment, ExportControl, run};
-use crate::export::domain::estimate::SizeEstimate;
+use crate::export::domain::estimate::{SizeEstimate, output_frames};
 use crate::export::domain::outcome::ExportOutput;
-use crate::export::domain::plan::ExportRequest;
+use crate::export::domain::plan::{ExportPlan, ExportRequest};
 use crate::export::domain::settings::FileType;
 use crate::export::infrastructure::memory;
 use crate::probe::domain::SourceInfo;
@@ -44,11 +49,13 @@ fn estimate_accuracy() {
     let tools = SearchPath::from_env().locate_tools();
     let ffmpeg = tools.ffmpeg.expect("ffmpeg on PATH");
     let ffprobe_path = tools.ffprobe.expect("ffprobe on PATH");
-    println!("clip | selection | settings | type | estimate | export | error | settled after s");
+    println!(
+        "clip | selection | settings | type | estimate | export | error | settled after s | GIF frames, size, loop"
+    );
     for (index, clip) in clips.split('|').map(PathBuf::from).enumerate() {
         let info = ffprobe::probe(&ffprobe_path, &clip).expect("clip probes");
         for case in cases(&info, index == 0) {
-            compare(&ffmpeg, &clip, &info, &case);
+            compare(&ffmpeg, &ffprobe_path, &clip, &info, &case);
         }
     }
 }
@@ -102,14 +109,15 @@ fn request(clip: &Path, info: &SourceInfo, case: &Case) -> ExportRequest {
             "width": case.width, "fps": case.fps, "speed": 1, "direction": case.direction,
             "rotation": 0, "flipHorizontal": false, "flipVertical": false,
             "fileTypes": file_types, "gifColors": 256, "gifDither": "sierra2_4a",
-            "plays": 0, "webpQuality": 80
+            "plays": 0, "webpQuality": 80,
+            "gifEncoder": std::env::var("VTG_ESTIMATE_GIF_ENCODER").unwrap_or_else(|_| "ffmpeg".to_owned())
         },
         "keepSound": false
     }))
     .unwrap()
 }
 
-fn compare(ffmpeg: &Path, clip: &Path, info: &SourceInfo, case: &Case) {
+fn compare(ffmpeg: &Path, ffprobe_path: &Path, clip: &Path, info: &SourceInfo, case: &Case) {
     let gifski = SearchPath::from_env().find("gifski");
     let work = TempDir::new().unwrap();
     let destination = TempDir::new().unwrap();
@@ -154,6 +162,18 @@ fn compare(ffmpeg: &Path, clip: &Path, info: &SourceInfo, case: &Case) {
 
     let name = clip.file_name().unwrap().to_string_lossy();
     let name: String = name.chars().take(24).collect();
+    let gif_check = outputs.iter().find_map(|output| match output {
+        ExportOutput::Done {
+            file_type: FileType::Gif,
+            path,
+            ..
+        } => Some(check_gif(ffprobe_path, Path::new(path), &plan)),
+        ExportOutput::Failed {
+            file_type: FileType::Gif,
+            reason,
+        } => Some(format!("failed: {reason}")),
+        _ => None,
+    });
     for estimate in estimates {
         let (file_type, estimated) = match estimate {
             SizeEstimate::Done { file_type, bytes } => (file_type, bytes),
@@ -172,8 +192,12 @@ fn compare(ffmpeg: &Path, clip: &Path, info: &SourceInfo, case: &Case) {
             })
             .unwrap_or(0);
         let error = (estimated as f64 - exported as f64) / exported as f64 * 100.0;
+        let checked = match (file_type, &gif_check) {
+            (FileType::Gif, Some(check)) => check.as_str(),
+            _ => "",
+        };
         println!(
-            "{name} | {:.1}-{:.1} s | {}/{} {} | {} | {} | {} | {error:+.1}% | {:.2}",
+            "{name} | {:.1}-{:.1} s | {}/{} {} | {} | {} | {} | {error:+.1}% | {:.2} | {checked}",
             case.start,
             case.end,
             case.width,
@@ -185,6 +209,45 @@ fn compare(ffmpeg: &Path, clip: &Path, info: &SourceInfo, case: &Case) {
             wall(file_type)
         );
     }
+}
+
+/// The exported GIF against the plan: decoded frames (gifski stores a frame that repeats the one
+/// before it once, held longer, so it may have fewer than the export encoded), pixel size and the
+/// NETSCAPE loop count, e.g. `frames 75/75, 480x270 (480x270), loop forever`.
+fn check_gif(ffprobe_path: &Path, gif: &Path, plan: &ExportPlan) -> String {
+    let output = crate::process::command(ffprobe_path)
+        .args(["-v", "error", "-count_frames", "-select_streams", "v:0"])
+        .args([
+            "-show_entries",
+            "stream=width,height,nb_read_frames",
+            "-of",
+            "csv=p=0",
+        ])
+        .arg(gif)
+        .output()
+        .unwrap();
+    let probed = String::from_utf8_lossy(&output.stdout).trim().to_owned();
+    let mut fields = probed.split(',');
+    let (width, height, frames) = (
+        fields.next().unwrap_or("?"),
+        fields.next().unwrap_or("?"),
+        fields.next().unwrap_or("?"),
+    );
+    let bytes = std::fs::read(gif).unwrap();
+    let looped = match bytes.windows(11).position(|w| w == b"NETSCAPE2.0") {
+        None => "once".to_owned(),
+        Some(at) => match u16::from_le_bytes([bytes[at + 13], bytes[at + 14]]) {
+            0 => "forever".to_owned(),
+            repeats => format!("{repeats} repeats"),
+        },
+    };
+    let size = plan.selection.size;
+    format!(
+        "frames {frames}/{}, {width}x{height} ({}x{}), loop {looped}",
+        output_frames(&plan.selection),
+        size.width,
+        size.height
+    )
 }
 
 fn label(file_type: FileType) -> &'static str {

@@ -6,7 +6,8 @@
 //! folder and deleted as soon as they are measured. The methods are in
 //! [`crate::export::domain::estimate`]. For a selection up to 20 s, GIF and WebP share one ffmpeg
 //! that decodes it once; a longer one gets a run per file type (a run per window for WebP). MP4
-//! always runs on its own. Everything runs at once and each file type settles as it finishes.
+//! and a gifski GIF (an ffmpeg piping to gifski) always run on their own. Everything runs at once
+//! and each file type settles as it finishes.
 
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
@@ -17,7 +18,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use super::{Environment, lock};
 use crate::export::domain::args::{
-    InputTrim, SharedOutput, SinglePass, Span, sample_args, shared_sample_args,
+    InputTrim, SharedOutput, SinglePass, Span, gifski_args, sample_args, shared_sample_args,
     windowed_sample_args,
 };
 use crate::export::domain::estimate::{
@@ -30,6 +31,7 @@ use crate::export::domain::progress::ENCODED;
 use crate::export::domain::settings::FileType;
 use crate::export::infrastructure::captions::CaptionFile;
 use crate::export::infrastructure::job::{Job, JobEnd};
+use crate::process::Priority;
 
 /// Numbers sample files, so a cancelled estimate still deleting its files never shares a name
 /// with the next one's.
@@ -146,17 +148,18 @@ pub fn estimate(
         control,
         captions: captions.as_ref().map(CaptionFile::path),
     };
-    let file_types = &plan.selection.settings.file_types;
+    let settings = &plan.selection.settings;
     // Short selections share one decode between GIF and WebP. MP4 always runs on its own: a
     // streaming x264 output beside a GIF that holds every frame for its palette deadlocked
-    // ffmpeg's scheduler (ffmpeg 9.0, a 1080p H.264 talk; GIF with WebP did not).
+    // ffmpeg's scheduler (ffmpeg 9.0, a 1080p H.264 talk; GIF with WebP did not). A gifski GIF
+    // does too, since its frames leave through ffmpeg's stdout for a gifski of its own.
     let (shared, own): (Vec<FileType>, Vec<FileType>) =
         if plan.selection.selection_seconds <= SHARED_MAX_SECONDS {
-            file_types
-                .iter()
-                .partition(|&&file_type| file_type != FileType::Mp4)
+            settings.file_types.iter().partition(|&&file_type| {
+                file_type != FileType::Mp4 && !settings.piped_to_gifski(file_type)
+            })
         } else {
-            (Vec::new(), file_types.clone())
+            (Vec::new(), settings.file_types.clone())
         };
     let run = &run;
     let mut estimates: Vec<SizeEstimate> = thread::scope(|scope| {
@@ -342,7 +345,7 @@ impl Run<'_> {
                 .collect();
             let args = shared_sample_args(&self.plan.source, input_trim, self.captions, &outputs);
             let mut frames = vec![0u64; outputs.len()];
-            let ended = self.run_job(&args, "shared run", |line| {
+            let ended = self.run_job(&args, None, "shared run", |line| {
                 let index = line
                     .split_once('=')
                     .and_then(|(key, _)| key.strip_prefix('s'))
@@ -374,8 +377,8 @@ impl Run<'_> {
             .collect()
     }
 
-    /// One file type from its own ffmpeg runs: GIF's windows in one, WebP's windows a run each,
-    /// all at once.
+    /// One file type from its own ffmpeg runs: GIF's windows in one (piped to gifski for a gifski
+    /// GIF), WebP's windows a run each, all at once.
     fn separate(&self, file_type: FileType) -> SizeEstimate {
         let plan = match self.plan(file_type) {
             Ok(plan) => plan,
@@ -418,12 +421,25 @@ impl Run<'_> {
         if window.is_some() {
             pass.trim = window;
         }
-        let what = match window {
+        let mut what = match window {
             Some(window) => format!("{} at {} s", file_type.extension(), window.seek),
             None => file_type.extension().to_owned(),
         };
+        let settings = &self.plan.selection.settings;
+        let gifski = if settings.piped_to_gifski(file_type) {
+            let gifski = self
+                .env
+                .gifski
+                .ok_or_else(|| Stopped::Failed("gifski was not found on PATH".to_owned()))?;
+            what.push_str(" and gifski");
+            let width = self.plan.selection.size.width;
+            Some((gifski, gifski_args(settings, width, &file.0)))
+        } else {
+            None
+        };
         let mut frames = 0;
-        self.run_job(&args(&pass), &what, |line| {
+        let gifski = gifski.as_ref().map(|(path, args)| (*path, args.as_slice()));
+        self.run_job(&args(&pass), gifski, &what, |line| {
             if line.starts_with(ENCODED) {
                 frames += 1;
             }
@@ -431,19 +447,31 @@ impl Run<'_> {
         file.read(frames)
     }
 
-    /// Runs ffmpeg with `args` in the background until it exits, handing each stdout line to
-    /// `on_line`, unless the estimate is cancelled first. `what` names the run in the spawn log.
+    /// Runs ffmpeg with `args` in the background until it exits, piping its frames to `gifski`
+    /// with its arguments when given, and handing each progress line to `on_line`, unless the
+    /// estimate is cancelled first. `what` names the run in the spawn log. A cancel kills both
+    /// processes, so a stalled pipe cannot outlive the estimate.
     fn run_job(
         &self,
         args: &[OsString],
+        gifski: Option<(&Path, &[OsString])>,
         what: &str,
         on_line: impl FnMut(&str),
     ) -> Result<(), Stopped> {
         if self.control.is_cancelled() {
             return Err(Stopped::Cancelled);
         }
-        let (job, output) =
-            Job::start_in_background(self.env.ffmpeg, args).map_err(Stopped::Failed)?;
+        let started = match gifski {
+            Some((gifski, gifski_args)) => Job::start_piped(
+                self.env.ffmpeg,
+                args,
+                gifski,
+                gifski_args,
+                Priority::Background,
+            ),
+            None => Job::start_in_background(self.env.ffmpeg, args),
+        };
+        let (job, output) = started.map_err(Stopped::Failed)?;
         log_spawn(what);
         let job = Arc::new(job);
         self.control.attach(&job);

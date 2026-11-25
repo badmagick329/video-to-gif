@@ -321,3 +321,79 @@ fn caption_png(width: u32, height: u32) -> Vec<u8> {
     assert!(output.status.success(), "{output:?}");
     fs::read(out).unwrap()
 }
+
+#[test]
+fn a_gifski_gif_is_sampled_through_its_own_pipe_near_the_export() {
+    assert!(gifski().is_some(), "gifski must be on PATH for this test");
+    // A 7 s selection would share one run with WebP; a gifski GIF runs on its own beside it. A
+    // 2.5 s one is encoded whole, which is exact.
+    for (start, end) in [(0.5, 7.5), (1.0, 23.0)] {
+        let compared = compare(json!({
+            "trim": { "start": start, "end": end },
+            "settings": { "gifEncoder": "gifski" },
+        }));
+        for file_type in [FileType::Gif, FileType::Webp] {
+            let error = compared.error(file_type);
+            assert!(
+                error.abs() < 0.15,
+                "{start}-{end} s: gifski {file_type:?} off by {error:.3}"
+            );
+        }
+        assert_eq!(
+            compared.estimated(FileType::Mp4),
+            compared.exported(FileType::Mp4)
+        );
+        assert_eq!(compared.left_behind, Vec::<PathBuf>::new());
+    }
+    let whole = compare(json!({
+        "trim": { "start": 2.0, "end": 4.5 },
+        "settings": { "gifEncoder": "gifski", "fileTypes": ["gif"] },
+    }));
+    assert_eq!(
+        whole.estimated(FileType::Gif),
+        whole.exported(FileType::Gif)
+    );
+}
+
+#[test]
+fn a_cancel_mid_sample_stops_ffmpeg_and_gifski_and_leaves_nothing() {
+    let source_dir = TempDir::new().unwrap();
+    let source = clip(source_dir.path());
+    let work = TempDir::new().unwrap();
+    let ffmpeg = ffmpeg();
+    // The whole 24 s at full size, so the pipe is busy when the cancel lands.
+    let plan = request(
+        &source,
+        json!({ "settings": { "gifEncoder": "gifski", "fileTypes": ["gif"], "width": 320, "fps": 25 } }),
+    )
+    .validate(work.path().to_owned())
+    .unwrap();
+    let control = EstimateControl::default();
+    let results = std::thread::scope(|scope| {
+        scope.spawn(|| {
+            // Once the sample's GIF exists, gifski is writing it.
+            while fs::read_dir(work.path()).unwrap().count() == 0 {
+                std::thread::sleep(std::time::Duration::from_millis(5));
+            }
+            control.cancel(false);
+        });
+        estimate(
+            &plan,
+            Environment {
+                ffmpeg: &ffmpeg,
+                gifski: gifski(),
+                work_dir: work.path(),
+                available_memory: None,
+            },
+            &control,
+            &|_| {},
+        )
+    });
+    assert_eq!(
+        results,
+        [SizeEstimate::Cancelled {
+            file_type: FileType::Gif
+        }]
+    );
+    assert_eq!(fs::read_dir(work.path()).unwrap().count(), 0);
+}
