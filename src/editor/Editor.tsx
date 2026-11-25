@@ -12,7 +12,7 @@ import { useExport } from './useExport';
 import { useMemoryEstimate } from './useMemoryEstimate';
 import { fileName, useSource } from './useSource';
 import { useClipShortcuts } from './useClipShortcuts';
-import type { Tool } from '../ipc/probe';
+import type { Tools } from '../ipc/probe';
 import {
   OutputSettings,
   carriedOverSummary,
@@ -27,7 +27,7 @@ import { ClipCrop, ClipTrim } from './lib/types';
  * settings; the source and its preview come from `useSource`, exports and their results from
  * `useExport`, and where they are saved from `useDestination`.
  */
-export default function Editor({ ffmpeg }: { ffmpeg: Tool }) {
+export default function Editor({ tools }: { tools: Tools }) {
   const [settings, setSettings] = useState<OutputSettings>(
     defaultOutputSettings
   );
@@ -121,7 +121,8 @@ export default function Editor({ ffmpeg }: { ffmpeg: Tool }) {
         </div>
       )}
       <StatusBar
-        ffmpeg={ffmpeg}
+        ffmpeg={tools.ffmpeg}
+        gifski={tools.gifski}
         preview={open && open.preview}
         memory={memory}
         onShowShortcuts={() => setShortcutsOpen(true)}

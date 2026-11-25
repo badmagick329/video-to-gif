@@ -18,7 +18,7 @@ import {
   renderWithListeners,
   resetTauri,
   sourceInfo,
-  ffmpegFound,
+  toolsFound,
 } from './tauri';
 
 vi.mock('@tauri-apps/api/core', async () => (await import('./tauri')).core);
@@ -194,7 +194,7 @@ describe('output preview', () => {
     'draws the crop from %s and redraws when it changes',
     async (_, preview, frame) => {
       clipBackend(sourceInfo({ width: 1280, height: 720 }), preview);
-      await renderWithListeners(<Editor ffmpeg={ffmpegFound} />);
+      await renderWithListeners(<Editor tools={toolsFound} />);
       const video = await openClip('C:/videos/clip.mp4', frame);
       // The crop is a fraction of the frame, so a proxy's pixels give the same picture.
       const k = frame.width / 1280;
@@ -233,7 +233,7 @@ describe('output preview', () => {
 
   test('a new frame redraws the preview', async () => {
     clipBackend(sourceInfo());
-    await renderWithListeners(<Editor ffmpeg={ffmpegFound} />);
+    await renderWithListeners(<Editor tools={toolsFound} />);
     const video = await openClip('C:/videos/clip.mp4', { width: 1280, height: 720 });
     drawImage.mockClear();
     await act(async () => {

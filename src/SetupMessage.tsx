@@ -1,4 +1,4 @@
-import type { FfmpegTools, Tool } from './ipc/probe';
+import type { Tool, Tools } from './ipc/probe';
 
 function problem(name: string, tool: Tool): string | null {
   switch (tool.status) {
@@ -35,7 +35,7 @@ function ToolLine({ name, tool }: { name: string; tool: Tool }) {
  * Shown in place of the editor when ffmpeg or ffprobe cannot be used: the editor's window, dark
  * stage and status bar, with what is missing and how to install it in the middle.
  */
-export default function SetupMessage({ tools }: { tools: FfmpegTools }) {
+export default function SetupMessage({ tools }: { tools: Tools }) {
   return (
     <main className='grid h-dvh grid-rows-[minmax(0,1fr)_26px] overflow-hidden bg-stage'>
       <div className='flex min-h-0 items-center justify-center overflow-y-auto p-8'>

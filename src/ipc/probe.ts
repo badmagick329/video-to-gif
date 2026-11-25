@@ -7,7 +7,8 @@ export type Tool =
   | { status: 'missing' }
   | { status: 'unusable'; path: string; reason: string };
 
-export type FfmpegTools = { ffmpeg: Tool; ffprobe: Tool };
+/** The startup check. The editor needs ffmpeg and ffprobe found; gifski is optional. */
+export type Tools = { ffmpeg: Tool; ffprobe: Tool; gifski: Tool };
 
 export type SourceInfo = {
   /** Seconds. */
@@ -36,8 +37,8 @@ export type ProbeError =
   | { kind: 'noVideoStream'; path: string }
   | { kind: 'invalidOutput'; path: string; reason: string };
 
-export function findFfmpeg(): Promise<FfmpegTools> {
-  return invoke<FfmpegTools>('find_ffmpeg');
+export function findTools(): Promise<Tools> {
+  return invoke<Tools>('find_tools');
 }
 
 export function isProbeError(error: unknown): error is ProbeError {

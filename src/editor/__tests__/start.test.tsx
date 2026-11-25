@@ -10,7 +10,7 @@ import {
   drag,
   drop,
   estimateAnswers,
-  ffmpegFound,
+  toolsFound,
   invoked,
   memoryFits,
   mock2dCanvas,
@@ -89,7 +89,7 @@ afterEach(() => {
 
 test('a fresh launch shows the empty window: Open, the drop zone, Recent, and what carries over', async () => {
   startBackend();
-  await renderWithListeners(<Editor ffmpeg={ffmpegFound} />);
+  await renderWithListeners(<Editor tools={toolsFound} />);
 
   const toolbar = screen.getByRole('banner');
   expect(
@@ -130,7 +130,7 @@ test('a fresh launch shows the empty window: Open, the drop zone, Recent, and wh
 
 test('a Recent entry opens through the same commands as a dialog pick', async () => {
   startBackend();
-  await renderWithListeners(<Editor ffmpeg={ffmpegFound} />);
+  await renderWithListeners(<Editor tools={toolsFound} />);
 
   fireEvent.click(
     within(recentList()).getByRole('button', { name: /^stage\.mp4/ })
@@ -151,7 +151,7 @@ test('a Recent entry opens through the same commands as a dialog pick', async ()
 
 test('closing a clip shows Recent again, loaded afresh', async () => {
   startBackend();
-  await renderWithListeners(<Editor ffmpeg={ffmpegFound} />);
+  await renderWithListeners(<Editor tools={toolsFound} />);
   expect(invoked('recent_sources')).toHaveLength(1);
 
   await drop('C:\\videos\\new.mp4');
@@ -166,7 +166,7 @@ test('closing a clip shows Recent again, loaded afresh', async () => {
 
 test('the remove button takes an entry off Recent and leaves the rest', async () => {
   startBackend();
-  await renderWithListeners(<Editor ffmpeg={ffmpegFound} />);
+  await renderWithListeners(<Editor tools={toolsFound} />);
 
   fireEvent.click(
     screen.getByRole('button', { name: 'Remove stage.mp4 from Recent' })
@@ -184,7 +184,7 @@ test('the remove button takes an entry off Recent and leaves the rest', async ()
 
 test('with nothing in Recent, the list is not shown', async () => {
   startBackend([]);
-  await renderWithListeners(<Editor ffmpeg={ffmpegFound} />);
+  await renderWithListeners(<Editor tools={toolsFound} />);
   expect(
     screen.queryByRole('navigation', { name: 'Recent videos' })
   ).not.toBeInTheDocument();
@@ -197,7 +197,7 @@ test('an entry whose file has gone since the list loaded says so', async () => {
       throw { kind: 'notFound', path };
     },
   });
-  await renderWithListeners(<Editor ffmpeg={ffmpegFound} />);
+  await renderWithListeners(<Editor tools={toolsFound} />);
 
   fireEvent.click(
     within(recentList()).getByRole('button', { name: /^concert\.mkv/ })
@@ -210,7 +210,7 @@ test('an entry whose file has gone since the list loaded says so', async () => {
 
 test('dragging over the window lights up the drop zone, and a drop opens the file', async () => {
   startBackend();
-  await renderWithListeners(<Editor ffmpeg={ffmpegFound} />);
+  await renderWithListeners(<Editor tools={toolsFound} />);
   expect(dropZone()).not.toHaveClass('border-accent');
 
   await drag('enter', 'C:\\videos\\clip.mp4');
@@ -231,7 +231,7 @@ test('dragging over the window lights up the drop zone, and a drop opens the fil
 
 test('with a video open, dragging highlights the viewer and a drop replaces the video', async () => {
   startBackend();
-  await renderWithListeners(<Editor ffmpeg={ffmpegFound} />);
+  await renderWithListeners(<Editor tools={toolsFound} />);
   await drop('C:\\videos\\first.mp4');
   expect(screen.queryByText(/^Drop to open/)).not.toBeInTheDocument();
 
@@ -254,7 +254,7 @@ test('with a video open, dragging highlights the viewer and a drop replaces the 
 test('Open video in the drop zone opens the file dialog', async () => {
   startBackend();
   dialog.open.mockResolvedValue(null);
-  await renderWithListeners(<Editor ffmpeg={ffmpegFound} />);
+  await renderWithListeners(<Editor tools={toolsFound} />);
   fireEvent.click(screen.getByRole('button', { name: /^Open video…/ }));
   expect(dialog.open).toHaveBeenCalledTimes(1);
 });

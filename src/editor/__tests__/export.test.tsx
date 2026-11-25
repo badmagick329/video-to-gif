@@ -21,7 +21,7 @@ import {
   sourceInfo,
   tauri,
   exportButton,
-  ffmpegFound,
+  toolsFound,
 } from './tauri';
 
 vi.mock('@tauri-apps/api/core', async () => (await import('./tauri')).core);
@@ -80,7 +80,7 @@ async function openEditor(commands: Record<string, (args: Record<string, unknown
     cancel_export: async () => {},
     ...commands,
   });
-  const view = await renderWithListeners(<Editor ffmpeg={ffmpegFound} />);
+  const view = await renderWithListeners(<Editor tools={toolsFound} />);
   await openClip(source, { width: 1280, height: 720 });
   return view;
 }

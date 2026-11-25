@@ -4,7 +4,7 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import type { ReactElement } from 'react';
 
-import type { SourceInfo } from '../../ipc/probe';
+import type { SourceInfo, Tools } from '../../ipc/probe';
 
 type Args = Record<string, unknown>;
 type Handler = (args: Args) => Promise<unknown>;
@@ -210,9 +210,19 @@ export const estimatedSize = () =>
 export const exportButton = () =>
   screen.getByRole('button', { name: /^Export( |$)/ });
 
-/** The ffmpeg the startup check found, as the status bar shows it. */
-export const ffmpegFound = {
-  status: 'found',
-  path: 'C:\ffmpeg\bin\ffmpeg.exe',
-  version: '9.0.1',
-} as const;
+/** What the startup check found on a PC without gifski: ffmpeg and ffprobe only. */
+export const toolsFound: Tools = {
+  ffmpeg: { status: 'found', path: 'C:\\ffmpeg\\bin\\ffmpeg.exe', version: '9.0.1' },
+  ffprobe: { status: 'found', path: 'C:\\ffmpeg\\bin\\ffprobe.exe', version: '9.0.1' },
+  gifski: { status: 'missing' },
+};
+
+/** What the startup check found with gifski on PATH too. */
+export const toolsWithGifski: Tools = {
+  ...toolsFound,
+  gifski: {
+    status: 'found',
+    path: 'C:\\Users\\me\\.cargo\\bin\\gifski.exe',
+    version: '1.32.0',
+  },
+};

@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react';
 
-import { findFfmpeg, type FfmpegTools } from './ipc/probe';
+import { findTools, type Tools } from './ipc/probe';
 import Editor from './editor/Editor';
 import SetupMessage from './SetupMessage';
 
 type Startup =
   | { stage: 'checking' }
-  | { stage: 'ready'; tools: FfmpegTools }
-  | { stage: 'setup'; tools: FfmpegTools }
+  | { stage: 'ready'; tools: Tools }
+  | { stage: 'setup'; tools: Tools }
   | { stage: 'failed'; message: string };
 
 export default function App() {
@@ -15,7 +15,7 @@ export default function App() {
 
   useEffect(() => {
     let cancelled = false;
-    findFfmpeg().then(
+    findTools().then(
       (tools) => {
         if (cancelled) return;
         const ready =
@@ -43,6 +43,6 @@ export default function App() {
         </main>
       );
     case 'ready':
-      return <Editor ffmpeg={startup.tools.ffmpeg} />;
+      return <Editor tools={startup.tools} />;
   }
 }

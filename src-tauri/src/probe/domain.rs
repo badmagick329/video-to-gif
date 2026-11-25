@@ -1,4 +1,4 @@
-//! What the probe slice knows, as plain types: whether ffmpeg and ffprobe can run, and a
+//! What the probe slice knows, as plain types: whether ffmpeg, ffprobe and gifski can run, and a
 //! source's validated metadata. These cross IPC as they are (serde), so the TypeScript mirror in
 //! `src/ipc/probe.ts` must change with them.
 
@@ -6,7 +6,7 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
-/// One of the two programs the app runs, as found (or not) on PATH.
+/// One of the programs the app runs, as found (or not) on PATH.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(
     tag = "status",
@@ -14,21 +14,23 @@ use serde::{Deserialize, Serialize};
     rename_all_fields = "camelCase"
 )]
 pub enum Tool {
-    /// Resolved on PATH and answered `-version` like the real program; ffmpeg also writes the
-    /// per-frame stats export reads progress from (6.1 and later).
+    /// Resolved on PATH and answered its version option like the real program; ffmpeg also
+    /// writes the per-frame stats export reads progress from (6.1 and later).
     Found { path: String, version: String },
     /// No file of that name in any PATH directory.
     Missing,
-    /// A file of that name exists but did not run as ffmpeg/ffprobe, or is an ffmpeg too old for
-    /// export, so the app cannot use it.
+    /// A file of that name exists but did not run as the program its name claims, or is an
+    /// ffmpeg too old for export, so the app cannot use it.
     Unusable { path: String, reason: String },
 }
 
-/// Result of the startup check. The app's main view needs both to be [`Tool::Found`].
+/// Result of the startup check. The app's main view needs `ffmpeg` and `ffprobe` to be
+/// [`Tool::Found`]; `gifski` is optional, and only a found one is offered as a GIF encoder.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct FfmpegTools {
+pub struct Tools {
     pub ffmpeg: Tool,
     pub ffprobe: Tool,
+    pub gifski: Tool,
 }
 
 /// A source's metadata, validated from ffprobe's output.

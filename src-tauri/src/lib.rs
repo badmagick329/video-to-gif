@@ -25,7 +25,7 @@ pub fn run() {
         })
         // Register slice commands here, and only here, as they are written.
         .invoke_handler(tauri::generate_handler![
-            probe::presentation::find_ffmpeg,
+            probe::presentation::find_tools,
             probe::presentation::probe_source,
             preview::presentation::open_source,
             preview::presentation::recent_sources,

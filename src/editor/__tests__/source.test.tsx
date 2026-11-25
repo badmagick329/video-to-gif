@@ -22,7 +22,7 @@ import {
   resetTauri,
   sourceInfo,
   tauri,
-  ffmpegFound,
+  toolsFound,
 } from './tauri';
 
 vi.mock('@tauri-apps/api/core', async () => (await import('./tauri')).core);
@@ -67,7 +67,7 @@ test('opens a file chosen with Open video and plays the source itself', async ()
     make_thumbnails: () => new Promise(() => {}),
   });
   dialog.open.mockResolvedValue('C:\\videos\\clip.mp4');
-  await renderWithListeners(<Editor ffmpeg={ffmpegFound} />);
+  await renderWithListeners(<Editor tools={toolsFound} />);
 
   fireEvent.click(screen.getByRole('button', { name: /^Open video/ }));
   expect(await screen.findByText('Opening clip.mp4…')).toBeInTheDocument();
@@ -88,7 +88,7 @@ test('opens a file chosen with Open video and plays the source itself', async ()
 
 test('Ctrl+O opens the file dialog', async () => {
   dialog.open.mockResolvedValue(null);
-  await renderWithListeners(<Editor ffmpeg={ffmpegFound} />);
+  await renderWithListeners(<Editor tools={toolsFound} />);
   fireEvent.keyDown(document.body, { key: 'o', ctrlKey: true });
   expect(dialog.open).toHaveBeenCalledTimes(1);
 });
@@ -103,7 +103,7 @@ test('shows why a dropped file cannot be opened, in plain words', async () => {
       };
     },
   });
-  await renderWithListeners(<Editor ffmpeg={ffmpegFound} />);
+  await renderWithListeners(<Editor tools={toolsFound} />);
 
   await drop('C:\\videos\\notes.mp4');
 
@@ -121,7 +121,7 @@ test('builds a proxy with progress when WebView2 cannot play the source', async 
     make_proxy: () => proxy.promise,
     make_thumbnails: () => new Promise(() => {}),
   });
-  await renderWithListeners(<Editor ffmpeg={ffmpegFound} />);
+  await renderWithListeners(<Editor tools={toolsFound} />);
 
   await drop('C:\\videos\\phone.mkv');
   expect(
@@ -149,7 +149,7 @@ test('falls back to a proxy when the player cannot decode the source, keeping th
     make_proxy: () => new Promise(() => {}),
     make_thumbnails: () => new Promise(() => {}),
   });
-  await renderWithListeners(<Editor ffmpeg={ffmpegFound} />);
+  await renderWithListeners(<Editor tools={toolsFound} />);
   await drop('C:\\videos\\high10.mp4');
   const end = screen.getByRole('textbox', { name: 'Out' });
   fireEvent.change(end, { target: { value: '0:05' } });
@@ -175,7 +175,7 @@ test('opening another source while a proxy builds shows only the new one', async
     make_proxy: () => firstProxy.promise,
     make_thumbnails: () => new Promise(() => {}),
   });
-  await renderWithListeners(<Editor ffmpeg={ffmpegFound} />);
+  await renderWithListeners(<Editor tools={toolsFound} />);
   await drop('C:\\videos\\first.mkv');
   expect(await screen.findByRole('progressbar')).toBeInTheDocument();
 
@@ -199,7 +199,7 @@ test('says when ffmpeg fails to make the proxy', async () => {
       throw { kind: 'proxyFailed', reason: 'Conversion failed!' };
     },
   });
-  await renderWithListeners(<Editor ffmpeg={ffmpegFound} />);
+  await renderWithListeners(<Editor tools={toolsFound} />);
   await drop('C:\\videos\\broken.mkv');
 
   const alert = await screen.findByRole('alert');
@@ -223,7 +223,7 @@ test('removing the clip mid-proxy closes its source in the backend', async () =>
       proxy.reject({ kind: 'cancelled' });
     },
   });
-  await renderWithListeners(<Editor ffmpeg={ffmpegFound} />);
+  await renderWithListeners(<Editor tools={toolsFound} />);
   await drop('C:\\videos\\phone.mkv');
   expect(await screen.findByRole('progressbar')).toBeInTheDocument();
 
@@ -244,7 +244,7 @@ test('removing a clip that plays the source also closes it', async () => {
   clipBackend(info);
   const closeSource = vi.fn(async () => {});
   tauri.commands.close_source = closeSource;
-  await renderWithListeners(<Editor ffmpeg={ffmpegFound} />);
+  await renderWithListeners(<Editor tools={toolsFound} />);
   await drop('C:\\videos\\clip.mp4');
 
   await act(async () => {
@@ -263,7 +263,7 @@ describe('on a proxy, sizes are in the source’s displayed pixels', () => {
 
   async function openProxied() {
     clipBackend(uhd, 'proxy');
-    await renderWithListeners(<Editor ffmpeg={ffmpegFound} />);
+    await renderWithListeners(<Editor tools={toolsFound} />);
     return openClip('C:\\videos\\uhd.mkv', { width: 1280, height: 720 });
   }
 

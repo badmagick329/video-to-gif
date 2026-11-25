@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react';
 import { invoke } from '@tauri-apps/api/core';
 
 import App from './App';
-import type { FfmpegTools, Tool } from './ipc/probe';
+import type { Tool, Tools } from './ipc/probe';
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }));
 // The main view listens for drops and proxy progress once ffmpeg is found.
@@ -18,9 +18,11 @@ const found = (name: string): Tool => ({
   version: '9.0.1',
 });
 
-function reportTools(tools: FfmpegTools) {
+/** The startup check's answer; gifski is missing unless given. */
+function reportTools(tools: Pick<Tools, 'ffmpeg' | 'ffprobe'> & Partial<Tools>) {
+  const answer: Tools = { gifski: { status: 'missing' }, ...tools };
   vi.mocked(invoke).mockImplementation(async (command) => {
-    if (command === 'find_ffmpeg') return tools;
+    if (command === 'find_tools') return answer;
     throw new Error(`unexpected command ${command}`);
   });
 }
@@ -38,7 +40,35 @@ test('shows the app once ffmpeg and ffprobe are both found', async () => {
     await screen.findByRole('heading', { level: 1, name: 'video-to-gif' })
   ).toBeInTheDocument();
   expect(screen.queryByText(/not found on PATH/)).not.toBeInTheDocument();
-  expect(invoke).toHaveBeenCalledWith('find_ffmpeg');
+  expect(invoke).toHaveBeenCalledWith('find_tools');
+  // gifski is optional: missing, it is simply not mentioned.
+  expect(screen.queryByText(/gifski/)).not.toBeInTheDocument();
+});
+
+test('shows gifski beside ffmpeg in the status bar when it is found', async () => {
+  reportTools({
+    ffmpeg: found('ffmpeg'),
+    ffprobe: found('ffprobe'),
+    gifski: {
+      status: 'found',
+      path: 'C:\\Users\\me\\.cargo\\bin\\gifski.exe',
+      version: '1.32.0',
+    },
+  });
+  render(<App />);
+
+  expect(await screen.findByText('gifski 1.32.0 on PATH')).toBeInTheDocument();
+  expect(screen.getByText('ffmpeg 9.0.1 on PATH')).toBeInTheDocument();
+});
+
+test('the setup message does not ask for gifski', async () => {
+  reportTools({ ffmpeg: { status: 'missing' }, ffprobe: found('ffprobe') });
+  render(<App />);
+
+  expect(
+    await screen.findByText('ffmpeg was not found on PATH.')
+  ).toBeInTheDocument();
+  expect(screen.queryByText(/gifski/)).not.toBeInTheDocument();
 });
 
 test('shows the setup message naming ffprobe when it is missing', async () => {

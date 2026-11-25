@@ -10,7 +10,7 @@ import {
   drop,
   resetTauri,
   sourceInfo,
-  ffmpegFound,
+  toolsFound,
 } from './tauri';
 
 vi.mock('@tauri-apps/api/core', async () => (await import('./tauri')).core);
@@ -47,7 +47,7 @@ afterEach(() => {
 /** Opens a 60-second clip by dropping it and waits until it can be edited. */
 async function loadClip(): Promise<[HTMLVideoElement]> {
   clipBackend(sourceInfo({ duration: 60 }));
-  const { container } = render(<Editor ffmpeg={ffmpegFound} />);
+  const { container } = render(<Editor tools={toolsFound} />);
   await act(async () => {});
   await drop('C:/videos/clip.mp4');
   await waitFor(() =>

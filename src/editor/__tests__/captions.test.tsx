@@ -18,7 +18,7 @@ import {
   renderWithListeners,
   resetTauri,
   sourceInfo,
-  ffmpegFound,
+  toolsFound,
 } from './tauri';
 
 vi.mock('@tauri-apps/api/core', async () => (await import('./tauri')).core);
@@ -252,7 +252,7 @@ describe('Captions', () => {
   /** Opens a 1280 × 720 clip in the editor with a decoded frame. */
   async function openEditor() {
     clipBackend(sourceInfo());
-    await renderWithListeners(<Editor ffmpeg={ffmpegFound} />);
+    await renderWithListeners(<Editor tools={toolsFound} />);
     await openClip('C:/videos/one.mp4', { width: 1280, height: 720 });
   }
   const type = (name: 'Top text' | 'Bottom text', value: string) =>

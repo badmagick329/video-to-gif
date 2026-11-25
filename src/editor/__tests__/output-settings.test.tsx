@@ -30,7 +30,7 @@ import {
   renderWithListeners,
   resetTauri,
   sourceInfo,
-  ffmpegFound,
+  toolsFound,
 } from './tauri';
 
 vi.mock('@tauri-apps/api/core', async () => (await import('./tauri')).core);
@@ -59,7 +59,7 @@ const runExport = () => act(async () => fireEvent.click(exportButton()));
 /** Opens a 4-second 1280 × 720 clip with sound, played directly or through a 640 × 360 proxy. */
 async function openEditor(preview: 'source' | 'proxy' = 'source') {
   clipBackend(sourceInfo(), preview);
-  const view = await renderWithListeners(<Editor ffmpeg={ffmpegFound} />);
+  const view = await renderWithListeners(<Editor tools={toolsFound} />);
   await openClip(
     'C:/videos/one.mp4',
     preview === 'proxy' ? { width: 640, height: 360 } : { width: 1280, height: 720 }

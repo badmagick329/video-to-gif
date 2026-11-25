@@ -2,22 +2,23 @@
 //!
 //! Both read PATH afresh on each call rather than caching the startup result: the search costs
 //! microseconds, and keeping no state means `probe_source` always runs the ffprobe that
-//! `find_ffmpeg` would report.
+//! `find_tools` would report.
 
 use std::path::PathBuf;
 
-use crate::probe::domain::{FfmpegTools, ProbeError, SourceInfo};
+use crate::probe::domain::{ProbeError, SourceInfo, Tools};
 use crate::probe::infrastructure::{ffprobe, tools};
 use crate::search_path::SearchPath;
 
-/// Reports where `ffmpeg` and `ffprobe` are and their versions, or which is missing or broken.
-/// The frontend calls it at startup and shows the setup message unless both are found.
+/// Reports where `ffmpeg`, `ffprobe` and `gifski` are and their versions, or which is missing or
+/// broken. The frontend calls it at startup and shows the setup message unless ffmpeg and ffprobe
+/// are both found; gifski is optional.
 #[tauri::command]
-pub async fn find_ffmpeg() -> FfmpegTools {
-    // Spawning two processes blocks; keep it off the async runtime's worker threads.
+pub async fn find_tools() -> Tools {
+    // Spawning the programs blocks; keep it off the async runtime's worker threads.
     tauri::async_runtime::spawn_blocking(|| tools::find_tools(&SearchPath::from_env()))
         .await
-        .expect("find_ffmpeg task panicked")
+        .expect("find_tools task panicked")
 }
 
 /// Probes the source at `path`, which must be an absolute path to an existing file.
