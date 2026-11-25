@@ -15,4 +15,5 @@ Sources arrive as filesystem paths, by native drag-drop onto the window or a fil
 - Source size is limited only by ffmpeg and the disk, not by memory.
 - ffprobe, the proxy encode and the export all read the source in place by its path.
 - The frontend handles a path, not file contents; playing the source in the webview needs Tauri to serve that path to it: the asset protocol, scoped at runtime to each opened source ([architecture](../context/architecture.md) *Previewing a source*).
+- Recent (VTG-14) stores paths, never files; reopening an entry goes through the same probe and `open_source` route as a dialog pick.
 - A source moved or deleted while open fails at its next read; Rust reports that as an error rather than assuming the path stays valid.
