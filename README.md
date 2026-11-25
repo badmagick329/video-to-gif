@@ -1,6 +1,6 @@
 # video-to-gif
 
-A Windows desktop app that turns a video into a GIF, WebP or MP4. You can trim, crop, resize, change the frame rate and speed, play forward, reversed or as a boomerang, rotate and flip, add captions, and tune GIF colours, WebP quality and MP4 sound, then save any mix of the three formats in one run. The settings started as the advanced mode of [mgck's Discord GIF tool](https://mgck.ink/discordgifs).
+A Windows desktop app that turns a video into a GIF, WebP or MP4. You can trim, crop, resize, change the frame rate and speed, play forward, reversed or as a boomerang, rotate and flip, add captions, and tune GIF colours (or make the GIF with gifski), WebP quality and MP4 sound, then save any mix of the three formats in one run. The settings started as the advanced mode of [mgck's Discord GIF tool](https://mgck.ink/discordgifs).
 
 The browser version runs ffmpeg as WebAssembly and fails on AV1, HEVC and MKV files and on multi-GB recordings. This app runs your own ffmpeg instead, so it opens anything your ffmpeg can read, at any size, straight from where the file sits on disk.
 
@@ -10,6 +10,7 @@ It is an early version (0.1.0) with rough edges. To open a video, drop it anywhe
 
 - Windows 10 or 11 with WebView2 (Windows 11 ships it).
 - `ffmpeg` and `ffprobe` 6.1 or newer on your PATH. The app shows a setup message when either is missing or ffmpeg is too old. Check with `where.exe ffmpeg` and `where.exe ffprobe`.
+- Optional: [gifski](https://gif.ski) on your PATH (tested with 1.32.0, `cargo install gifski`). When the app finds it at startup, the GIF encoder menu offers gifski for higher-quality GIFs, and the status bar shows its version. Without it, GIFs are made by ffmpeg.
 
 To build it you also need stable Rust, Node.js and pnpm.
 

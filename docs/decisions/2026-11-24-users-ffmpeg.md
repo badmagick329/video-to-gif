@@ -12,6 +12,7 @@ v0 finds `ffmpeg` and `ffprobe` on PATH and shows a setup message when either is
 
 ## Consequences
 
-- The `probe` slice owns the lookup ([architecture](../context/architecture.md) *Finding ffmpeg*); nothing else works until both are found.
+- The `probe` slice owns the lookup ([architecture](../context/architecture.md) *Finding tools*); nothing else works until both are found.
+- gifski, an optional GIF encoder, is found on PATH the same way ([gifski from PATH, optional](2026-11-25-gifski-from-path.md)).
 - The ffmpeg build is whatever the user installed, so versions and enabled encoders can differ between users. v0 is tested against the owner's ffmpeg 9.0.1 (gyan.dev full build).
 - The app has no ffmpeg binaries to ship, license or update.
