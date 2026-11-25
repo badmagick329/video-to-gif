@@ -8,18 +8,24 @@
 use serde::Serialize;
 
 use crate::export::domain::plan::{Selection, Size};
-use crate::export::domain::settings::{Direction, FileType};
+use crate::export::domain::settings::{Direction, FileType, GifEncoder};
 
 /// Bytes counted per pixel of a held frame: the GIF path's RGB with alpha, which overstates the
 /// YUV that MP4 and WebP hold, on the safe side.
 const BYTES_PER_PIXEL: u64 = 4;
 
-/// Frame copies held at the peak, or 0 when frames stream through. A GIF queues every frame for
-/// `paletteuse`, which waits for the palette made from the last one; `reverse` keeps another copy
-/// until the input ends, and Boomerang adds its forward half to the GIF queue. File types run one
-/// at a time, so the peak is the GIF run's whenever a GIF is ticked.
-pub fn held_copies(direction: Direction, file_types: &[FileType]) -> u32 {
-    let gif = file_types.contains(&FileType::Gif);
+/// Frame copies held at the peak, or 0 when frames stream through. An ffmpeg GIF queues every
+/// frame for `paletteuse`, which waits for the palette made from the last one; `reverse` keeps
+/// another copy until the input ends, and Boomerang adds its forward half to the GIF queue. File
+/// types run one at a time, so the peak is the GIF run's whenever an ffmpeg GIF is ticked.
+///
+/// A gifski GIF streams: gifski picks a palette per frame and keeps only a short window of
+/// frames, so its memory does not grow with the selection. Measured with gifski 1.32.0 on the
+/// owner's PC, its peak private bytes stayed at 42 to 44 MB at 480 x 270 for 150, 600 and 1800
+/// frames, and at 244 and 320 MB at 1280 x 720 for 120 and 720 frames, where holding every frame
+/// would take 74 MB to 2.5 GB. Only ffmpeg's `reverse` in front of it holds the selection.
+pub fn held_copies(direction: Direction, file_types: &[FileType], gif_encoder: GifEncoder) -> u32 {
+    let gif = file_types.contains(&FileType::Gif) && gif_encoder == GifEncoder::Ffmpeg;
     match direction {
         Direction::Forward => u32::from(gif),
         _ if !gif => 1,
@@ -36,9 +42,10 @@ pub fn frame_memory_limit_seconds(
     speed: f64,
     direction: Direction,
     file_types: &[FileType],
+    gif_encoder: GifEncoder,
     budget: f64,
 ) -> Option<f64> {
-    let copies = held_copies(direction, file_types);
+    let copies = held_copies(direction, file_types, gif_encoder);
     if copies == 0 {
         return None;
     }
@@ -52,7 +59,11 @@ pub fn frame_memory_limit_seconds(
 /// the limit.
 pub fn held_bytes(selection: &Selection) -> u64 {
     let settings = &selection.settings;
-    let copies = held_copies(settings.direction, &settings.file_types);
+    let copies = held_copies(
+        settings.direction,
+        &settings.file_types,
+        settings.gif_encoder,
+    );
     // Frames of one pass through the selection; Boomerang's second pass is counted in `copies`.
     let frames = selection.selection_seconds / settings.speed * f64::from(settings.fps);
     (frames * frame_bytes(selection.size) as f64 * f64::from(copies)).ceil() as u64
@@ -90,6 +101,7 @@ impl MemoryEstimate {
                 settings.speed,
                 settings.direction,
                 &settings.file_types,
+                settings.gif_encoder,
                 budget as f64,
             )
         });
@@ -116,7 +128,15 @@ mod tests {
     const BUDGET: f64 = 480.0 * 270.0 * 4.0 * 2.0 * 15.0 * 60.0;
 
     fn limit(fps: u32, speed: f64, direction: Direction, types: &[FileType]) -> Option<f64> {
-        frame_memory_limit_seconds(SIZE, fps, speed, direction, types, BUDGET)
+        frame_memory_limit_seconds(
+            SIZE,
+            fps,
+            speed,
+            direction,
+            types,
+            GifEncoder::Ffmpeg,
+            BUDGET,
+        )
     }
 
     fn close(actual: Option<f64>, expected: f64) -> bool {
@@ -143,7 +163,24 @@ mod tests {
             width: 240,
             height: 136,
         };
-        let longer = frame_memory_limit_seconds(small, 15, 1.0, Reverse, &[Gif], BUDGET).unwrap();
+        let longer =
+            frame_memory_limit_seconds(small, 15, 1.0, Reverse, &[Gif], GifEncoder::Ffmpeg, BUDGET)
+                .unwrap();
         assert!(longer > 3.9 * 60.0);
+    }
+
+    #[test]
+    fn a_gifski_gif_holds_only_what_reverse_and_boomerang_hold() {
+        use Direction::*;
+        use GifEncoder::Gifski;
+        assert_eq!(held_copies(Forward, &[Gif], Gifski), 0);
+        assert_eq!(held_copies(Forward, &[Gif, Webp, Mp4], Gifski), 0);
+        assert_eq!(held_copies(Reverse, &[Gif], Gifski), 1);
+        assert_eq!(held_copies(Boomerang, &[Gif, Mp4], Gifski), 1);
+        let gifski = |direction| {
+            frame_memory_limit_seconds(SIZE, 15, 1.0, direction, &[Gif], Gifski, BUDGET)
+        };
+        assert_eq!(gifski(Forward), None);
+        assert!(close(gifski(Reverse), 120.0));
     }
 }
