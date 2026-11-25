@@ -120,7 +120,7 @@ mod tests {
             "settings": {
                 "width": 80, "fps": 10, "speed": speed, "direction": direction, "rotation": 0,
                 "flipHorizontal": false, "flipVertical": false, "fileTypes": ["gif"],
-                "gifColors": 256, "gifDither": "sierra2_4a", "plays": 0, "webpQuality": 80,
+                "gifColors": 256, "gifDither": "sierra2_4a", "gifskiQuality": 90, "gifskiMotionQuality": 90, "plays": 0, "webpQuality": 80,
                 "gifEncoder": encoder
             }
         }))

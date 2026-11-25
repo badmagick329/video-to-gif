@@ -108,7 +108,7 @@ fn request(clip: &Path, info: &SourceInfo, case: &Case) -> ExportRequest {
         "settings": {
             "width": case.width, "fps": case.fps, "speed": 1, "direction": case.direction,
             "rotation": 0, "flipHorizontal": false, "flipVertical": false,
-            "fileTypes": file_types, "gifColors": 256, "gifDither": "sierra2_4a",
+            "fileTypes": file_types, "gifColors": 256, "gifDither": "sierra2_4a", "gifskiQuality": 90, "gifskiMotionQuality": 90,
             "plays": 0, "webpQuality": 80,
             "gifEncoder": std::env::var("VTG_ESTIMATE_GIF_ENCODER").unwrap_or_else(|_| "ffmpeg".to_owned())
         },

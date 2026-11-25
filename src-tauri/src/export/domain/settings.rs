@@ -155,8 +155,6 @@ pub const GIF_COLORS_LIMIT: Limit = Limit { min: 2, max: 256 };
 pub const WEBP_QUALITY_LIMIT: Limit = Limit { min: 1, max: 100 };
 /// gifski's `--quality` and `--motion-quality`.
 pub const GIFSKI_QUALITY_LIMIT: Limit = Limit { min: 1, max: 100 };
-/// gifski's own default quality; its motion quality follows its quality when not given.
-const GIFSKI_DEFAULT_QUALITY: f64 = 90.0;
 /// mgck offers 0 (forever) to 3 plays; 65535 is the most the GIF and WebP loop fields hold.
 pub const PLAYS_LIMIT: Limit = Limit { min: 0, max: 65535 };
 
@@ -182,20 +180,13 @@ pub struct SettingsInput {
     pub flip_horizontal: bool,
     pub flip_vertical: bool,
     pub file_types: Vec<FileType>,
-    #[serde(default)]
     pub gif_encoder: GifEncoder,
     pub gif_colors: f64,
     pub gif_dither: GifDither,
-    #[serde(default = "gifski_default_quality")]
     pub gifski_quality: f64,
-    #[serde(default = "gifski_default_quality")]
     pub gifski_motion_quality: f64,
     pub plays: f64,
     pub webp_quality: f64,
-}
-
-fn gifski_default_quality() -> f64 {
-    GIFSKI_DEFAULT_QUALITY
 }
 
 /// Settings within mgck's limits, with file types de-duplicated into the order a run makes them.
@@ -377,17 +368,6 @@ mod tests {
         let gifski = parse(json!({ "gifEncoder": "gifski", "fileTypes": ["gif", "webp"] }));
         assert!(gifski.piped_to_gifski(FileType::Gif));
         assert!(!gifski.piped_to_gifski(FileType::Webp));
-        // The encoder fields may be left out: an ffmpeg GIF, with gifski's own defaults.
-        let mut value = defaults();
-        let fields = value.as_object_mut().unwrap();
-        for key in ["gifEncoder", "gifskiQuality", "gifskiMotionQuality"] {
-            fields.remove(key);
-        }
-        let bare = serde_json::from_value::<SettingsInput>(value)
-            .unwrap()
-            .clamp();
-        assert_eq!(bare.gif_encoder, GifEncoder::Ffmpeg);
-        assert_eq!((bare.gifski_quality, bare.gifski_motion_quality), (90, 90));
         let mut value = defaults();
         value["gifEncoder"] = json!("imagemagick");
         assert!(serde_json::from_value::<SettingsInput>(value).is_err());

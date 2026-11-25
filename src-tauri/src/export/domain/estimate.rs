@@ -242,7 +242,7 @@ mod tests {
         let mut settings = json!({
             "width": 480, "fps": 15, "speed": 1, "direction": "forward", "rotation": 0,
             "flipHorizontal": false, "flipVertical": false, "fileTypes": ["gif", "webp", "mp4"],
-            "gifColors": 256, "gifDither": "sierra2_4a", "plays": 0, "webpQuality": 80
+            "gifColors": 256, "gifDither": "sierra2_4a", "gifEncoder": "ffmpeg", "gifskiQuality": 90, "gifskiMotionQuality": 90, "plays": 0, "webpQuality": 80
         });
         for (key, value) in patch.as_object().unwrap() {
             settings[key] = value.clone();

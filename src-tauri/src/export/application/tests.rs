@@ -155,7 +155,7 @@ fn request(source: &Source, patch: Value) -> ExportRequest {
             "width": 80, "fps": 10, "speed": 1, "direction": "forward", "rotation": 0,
             "flipHorizontal": false, "flipVertical": false, "topText": "", "bottomText": "",
             "captionSize": 12, "fileTypes": ["gif", "webp", "mp4"], "gifColors": 256,
-            "gifDither": "sierra2_4a", "plays": 0, "webpQuality": 80, "keepSound": false
+            "gifDither": "sierra2_4a", "gifEncoder": "ffmpeg", "gifskiQuality": 90, "gifskiMotionQuality": 90, "plays": 0, "webpQuality": 80, "keepSound": false
         },
         "keepSound": false
     });

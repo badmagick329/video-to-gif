@@ -27,7 +27,7 @@ fn request() -> Value {
             "width": 480, "fps": 15, "speed": 1, "direction": "forward", "rotation": 0,
             "flipHorizontal": false, "flipVertical": false, "topText": "", "bottomText": "",
             "captionSize": 12, "fileTypes": ["gif"], "gifColors": 256,
-            "gifDither": "sierra2_4a", "plays": 0, "webpQuality": 80, "keepSound": false
+            "gifDither": "sierra2_4a", "gifEncoder": "ffmpeg", "gifskiQuality": 90, "gifskiMotionQuality": 90, "plays": 0, "webpQuality": 80, "keepSound": false
         },
         "keepSound": false
     })
