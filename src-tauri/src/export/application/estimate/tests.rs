@@ -16,6 +16,14 @@ use crate::export::domain::plan::ExportRequest;
 use crate::process;
 use crate::search_path::SearchPath;
 
+/// gifski on PATH, for the gifski GIF tests; looked up once.
+fn gifski() -> Option<&'static Path> {
+    static GIFSKI: std::sync::OnceLock<Option<PathBuf>> = std::sync::OnceLock::new();
+    GIFSKI
+        .get_or_init(|| SearchPath::from_env().find("gifski"))
+        .as_deref()
+}
+
 fn ffmpeg() -> PathBuf {
     SearchPath::from_env()
         .locate_tools()
@@ -117,6 +125,7 @@ fn compare(patch: Value) -> Compared {
     let ffmpeg = ffmpeg();
     let env = Environment {
         ffmpeg: &ffmpeg,
+        gifski: gifski(),
         work_dir: work.path(),
         available_memory: None,
     };
@@ -244,6 +253,7 @@ fn a_cancelled_estimate_stops_its_samples_and_leaves_nothing() {
         &plan,
         Environment {
             ffmpeg: &ffmpeg,
+            gifski: gifski(),
             work_dir: work.path(),
             available_memory: None,
         },
@@ -276,6 +286,7 @@ fn a_whole_encode_that_would_not_fit_in_memory_is_not_run() {
         &plan,
         Environment {
             ffmpeg: &ffmpeg,
+            gifski: gifski(),
             work_dir: work.path(),
             available_memory: Some(1024),
         },

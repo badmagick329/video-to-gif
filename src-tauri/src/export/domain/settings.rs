@@ -39,6 +39,16 @@ pub enum Direction {
     Boomerang,
 }
 
+/// What makes a GIF: ffmpeg's palette filters, or the user's own gifski reading ffmpeg's frames
+/// through a pipe. gifski is optional and found on PATH; absent from a request means ffmpeg.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum GifEncoder {
+    #[default]
+    Ffmpeg,
+    Gifski,
+}
+
 /// `paletteuse`'s dithering, by ffmpeg's own names.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 pub enum GifDither {
@@ -143,6 +153,10 @@ pub const WIDTH_LIMIT: Limit = Limit { min: 16, max: 4096 };
 pub const FPS_LIMIT: Limit = Limit { min: 1, max: 60 };
 pub const GIF_COLORS_LIMIT: Limit = Limit { min: 2, max: 256 };
 pub const WEBP_QUALITY_LIMIT: Limit = Limit { min: 1, max: 100 };
+/// gifski's `--quality` and `--motion-quality`.
+pub const GIFSKI_QUALITY_LIMIT: Limit = Limit { min: 1, max: 100 };
+/// gifski's own default quality; its motion quality follows its quality when not given.
+const GIFSKI_DEFAULT_QUALITY: f64 = 90.0;
 /// mgck offers 0 (forever) to 3 plays; 65535 is the most the GIF and WebP loop fields hold.
 pub const PLAYS_LIMIT: Limit = Limit { min: 0, max: 65535 };
 
@@ -168,10 +182,20 @@ pub struct SettingsInput {
     pub flip_horizontal: bool,
     pub flip_vertical: bool,
     pub file_types: Vec<FileType>,
+    #[serde(default)]
+    pub gif_encoder: GifEncoder,
     pub gif_colors: f64,
     pub gif_dither: GifDither,
+    #[serde(default = "gifski_default_quality")]
+    pub gifski_quality: f64,
+    #[serde(default = "gifski_default_quality")]
+    pub gifski_motion_quality: f64,
     pub plays: f64,
     pub webp_quality: f64,
+}
+
+fn gifski_default_quality() -> f64 {
+    GIFSKI_DEFAULT_QUALITY
 }
 
 /// Settings within mgck's limits, with file types de-duplicated into the order a run makes them.
@@ -186,8 +210,12 @@ pub struct Settings {
     pub flip_vertical: bool,
     /// In [`FileType`] order, each at most once.
     pub file_types: Vec<FileType>,
+    pub gif_encoder: GifEncoder,
+    /// ffmpeg's palette size and dithering; gifski picks its own palettes.
     pub gif_colors: u32,
     pub gif_dither: GifDither,
+    pub gifski_quality: u32,
+    pub gifski_motion_quality: u32,
     /// Times a GIF or WebP plays; 0 is forever. MP4 players decide looping themselves.
     pub plays: u32,
     pub webp_quality: u32,
@@ -217,11 +245,21 @@ impl SettingsInput {
             flip_horizontal: self.flip_horizontal,
             flip_vertical: self.flip_vertical,
             file_types,
+            gif_encoder: self.gif_encoder,
             gif_colors: GIF_COLORS_LIMIT.clamp(self.gif_colors),
             gif_dither: self.gif_dither,
+            gifski_quality: GIFSKI_QUALITY_LIMIT.clamp(self.gifski_quality),
+            gifski_motion_quality: GIFSKI_QUALITY_LIMIT.clamp(self.gifski_motion_quality),
             plays: PLAYS_LIMIT.clamp(self.plays),
             webp_quality: WEBP_QUALITY_LIMIT.clamp(self.webp_quality),
         }
+    }
+}
+
+impl Settings {
+    /// Whether `file_type` is made by piping ffmpeg's frames to gifski rather than by ffmpeg alone.
+    pub fn piped_to_gifski(&self, file_type: FileType) -> bool {
+        file_type == FileType::Gif && self.gif_encoder == GifEncoder::Gifski
     }
 }
 
@@ -259,8 +297,11 @@ mod tests {
             "bottomText": "",
             "captionSize": 12,
             "fileTypes": ["gif"],
+            "gifEncoder": "ffmpeg",
             "gifColors": 256,
             "gifDither": "sierra2_4a",
+            "gifskiQuality": 90,
+            "gifskiMotionQuality": 90,
             "plays": 0,
             "webpQuality": 80,
             "keepSound": false
@@ -291,8 +332,11 @@ mod tests {
                 flip_horizontal: false,
                 flip_vertical: false,
                 file_types: vec![FileType::Gif],
+                gif_encoder: GifEncoder::Ffmpeg,
                 gif_colors: 256,
                 gif_dither: GifDither::Sierra24a,
+                gifski_quality: 90,
+                gifski_motion_quality: 90,
                 plays: 0,
                 webp_quality: 80,
             }
@@ -321,7 +365,32 @@ mod tests {
         assert_eq!(high.speed, 3.0);
 
         assert_eq!(parse(json!({ "fps": 14.6 })).fps, 15);
+        let gifski = parse(json!({ "gifskiQuality": 0, "gifskiMotionQuality": 140.4 }));
+        assert_eq!(gifski.gifski_quality, 1);
+        assert_eq!(gifski.gifski_motion_quality, 100);
         assert_eq!(parse(json!({ "width": "original" })).width, Width::Original);
+    }
+
+    #[test]
+    fn the_gif_encoder_is_ffmpeg_unless_gifski_is_asked_for() {
+        assert_eq!(parse(json!({})).gif_encoder, GifEncoder::Ffmpeg);
+        let gifski = parse(json!({ "gifEncoder": "gifski", "fileTypes": ["gif", "webp"] }));
+        assert!(gifski.piped_to_gifski(FileType::Gif));
+        assert!(!gifski.piped_to_gifski(FileType::Webp));
+        // The encoder fields may be left out: an ffmpeg GIF, with gifski's own defaults.
+        let mut value = defaults();
+        let fields = value.as_object_mut().unwrap();
+        for key in ["gifEncoder", "gifskiQuality", "gifskiMotionQuality"] {
+            fields.remove(key);
+        }
+        let bare = serde_json::from_value::<SettingsInput>(value)
+            .unwrap()
+            .clamp();
+        assert_eq!(bare.gif_encoder, GifEncoder::Ffmpeg);
+        assert_eq!((bare.gifski_quality, bare.gifski_motion_quality), (90, 90));
+        let mut value = defaults();
+        value["gifEncoder"] = json!("imagemagick");
+        assert!(serde_json::from_value::<SettingsInput>(value).is_err());
     }
 
     #[test]

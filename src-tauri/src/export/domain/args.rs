@@ -9,6 +9,9 @@ use crate::export::domain::plan::{Crop, ExportPlan, seek_start};
 use crate::export::domain::progress::{ENCODED, TAPPED, tap_share};
 use crate::export::domain::settings::{Direction, FileType, GifDither, Rotation, Settings};
 
+/// What a gifski GIF's ffmpeg writes in place of a file: Y4M frames on stdout, for gifski's stdin.
+const STDOUT: &str = "-";
+
 /// Where input seeking starts and how much of the input to read, in seconds.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct InputTrim {
@@ -185,12 +188,11 @@ fn encode_args(
     if let Some(captions) = pass.captions {
         args.push("-i".into());
         args.push(captions.into());
-        selection.push_str(&caption_overlay(pass.file_type, video_inputs));
+        selection.push_str(&caption_overlay(pass, video_inputs));
     }
     let (tail, options) = encoder(pass, "out");
 
-    let tap =
-        report == Report::FramesAndTap && tap_share(pass.file_type, settings.direction).is_some();
+    let tap = report == Report::FramesAndTap && tap_share(pass.file_type, settings).is_some();
     let graph = if tap {
         // Every tapped tail starts with a filter (a GIF's split or `reverse`), which now follows
         // the `[main]` label instead of a comma.
@@ -212,13 +214,14 @@ fn encode_args(
         .chain(options)
         .map(OsString::from),
     );
+    let reports = report_pipe(pass);
     if matches!(report, Report::Frames | Report::FramesAndTap) {
-        args.extend(frame_times("v:0", ENCODED));
+        args.extend(frame_times(reports, "v:0", ENCODED));
     }
-    args.push(pass.output.into());
+    args.push(encoder_output(pass));
     if tap {
         args.extend(["-map", "[tap]"].map(OsString::from));
-        args.extend(frame_times("v", TAPPED));
+        args.extend(frame_times(reports, "v", TAPPED));
         args.extend(["-f", "null", "-"].map(OsString::from));
     }
     args
@@ -247,7 +250,8 @@ pub struct SharedOutput<'a> {
 
 /// Size estimate samples that share one decode: a single ffmpeg reads the selection once, as the
 /// export does (`trim` is the export's input trim), and feeds every output through its own
-/// filtergraph, which ffmpeg runs on its own thread. Each output is the export's filters and
+/// filtergraph, which ffmpeg runs on its own thread. Never a gifski GIF, whose frames leave through
+/// stdout to a gifski of their own. Each output is the export's filters and
 /// encoder for its file type, over its spans of the selection. Decoding is most of a 1080p
 /// sample's cost, and separate runs decoded the same frames once per window plus from each
 /// window's keyframe, so sharing it cut the estimate of a 20 s selection by about a second.
@@ -289,7 +293,7 @@ pub fn shared_sample_args(
             }
         };
         if captions.is_some() {
-            graph.push_str(&caption_overlay(pass.file_type, 1));
+            graph.push_str(&caption_overlay(pass, 1));
         }
         let label = format!("o{index}");
         let (tail, options) = encoder(pass, &label);
@@ -304,8 +308,8 @@ pub fn shared_sample_args(
             .map(OsString::from),
         );
         args.extend(options.into_iter().map(OsString::from));
-        args.extend(frame_times("v:0", &output.key));
-        args.push(pass.output.into());
+        args.extend(frame_times(report_pipe(pass), "v:0", &output.key));
+        args.push(encoder_output(pass));
     }
     args
 }
@@ -316,6 +320,17 @@ fn encoder(pass: &SinglePass<'_>, label: &str) -> (String, Vec<String>) {
     let settings = pass.settings;
     let direction = direction_filter(settings.direction);
     match pass.file_type {
+        FileType::Gif if settings.piped_to_gifski(FileType::Gif) => {
+            // gifski reads Y4M, which carries no RGB, so the frames go as 4:4:4 to keep every
+            // pixel's colour. gifski decodes them as BT.709 limited range whatever the source was
+            // tagged, so they are converted to that first: an SD BT.601 clip came out redder
+            // without it.
+            let tail = format!(
+                "{direction},scale=out_color_matrix=bt709:out_range=tv,format=yuv444p[{label}]"
+            );
+            let options = ["-pix_fmt", "yuv444p", "-f", "yuv4mpegpipe"];
+            (tail, options.map(str::to_owned).into())
+        }
         FileType::Gif => {
             // stats_mode=diff and diff_mode=rectangle spend the palette and the re-encoding on
             // what moves, which keeps static backgrounds clean.
@@ -375,17 +390,62 @@ fn encoder(pass: &SinglePass<'_>, label: &str) -> (String, Vec<String>) {
     }
 }
 
-/// Output options that write `<key>=<seconds>` to stdout as each frame of the `stream` streams
+/// Output options that write `<key>=<seconds>` to `pipe` as each frame of the `stream` streams
 /// enters its encoder. Per frame and flushed per line, unlike `-progress`, whose report follows
 /// the muxed file and waits until every output has started.
-fn frame_times(stream: &str, key: &str) -> [OsString; 4] {
+fn frame_times(pipe: &str, stream: &str, key: &str) -> [OsString; 4] {
     [
         format!("-stats_enc_pre:{stream}"),
-        "pipe:1".to_owned(),
+        pipe.to_owned(),
         format!("-stats_enc_pre_fmt:{stream}"),
         format!("{key}={{t}}"),
     ]
     .map(OsString::from)
+}
+
+/// Where a run's frame times go: stdout, or stderr when stdout carries a gifski GIF's frames. With
+/// `-loglevel error` stderr otherwise holds only ffmpeg's errors, which the job tells apart.
+fn report_pipe(pass: &SinglePass<'_>) -> &'static str {
+    if pass.settings.piped_to_gifski(pass.file_type) {
+        "pipe:2"
+    } else {
+        "pipe:1"
+    }
+}
+
+/// The encoder's output: the pass's file, or stdout for gifski to read.
+fn encoder_output(pass: &SinglePass<'_>) -> OsString {
+    if pass.settings.piped_to_gifski(pass.file_type) {
+        STDOUT.into()
+    } else {
+        pass.output.into()
+    }
+}
+
+/// gifski's arguments for a GIF `width` pixels wide whose frames ffmpeg pipes in (the args of a
+/// gifski pass), written to `output`. `-W` because gifski otherwise shrinks anything past about
+/// 800 x 600; the frames already have their size, so it changes nothing else. `--fps` because
+/// gifski resamples to its own rate (20 by default). `-q` silences its progress bar.
+pub fn gifski_args(settings: &Settings, width: u32, output: &Path) -> Vec<OsString> {
+    let mut args: Vec<OsString> = [
+        "-q".to_owned(),
+        "-W".to_owned(),
+        width.to_string(),
+        "--fps".to_owned(),
+        settings.fps.to_string(),
+        // `=`, so clap reads `-1` as the value rather than as a flag.
+        format!("--repeat={}", gif_loop(settings.plays)),
+        "--quality".to_owned(),
+        settings.gifski_quality.to_string(),
+        "--motion-quality".to_owned(),
+        settings.gifski_motion_quality.to_string(),
+        "-o".to_owned(),
+    ]
+    .map(OsString::from)
+    .into();
+    args.push(output.into());
+    args.push(STDOUT.into());
+    args
 }
 
 /// Crop before scaling so later filters spend their work on the kept image. ffmpeg evaluates the
@@ -424,14 +484,15 @@ pub fn trim_input(input: &Path, trim: Option<InputTrim>) -> Vec<OsString> {
 /// Composites the caption image (input `index`) after the scale, so it lands on output pixels the way
 /// the preview draws it, and after the turn and flips, so it stays upright. A single image
 /// repeats over every frame (overlay's default `eof_action=repeat`); centring it rather than
-/// pinning it at 0:0 keeps a one-row rounding difference from shifting a caption off the edge. A
-/// GIF composites in RGB, which its palette needs anyway, so the outline skips a 4:2:0 round trip;
-/// MP4 and WebP encode 4:2:0 regardless.
-fn caption_overlay(file_type: FileType, index: usize) -> String {
-    let format = if file_type == FileType::Gif {
-        ":format=rgb"
-    } else {
-        ""
+/// pinning it at 0:0 keeps a one-row rounding difference from shifting a caption off the edge. An
+/// ffmpeg GIF composites in RGB, which its palette needs anyway, and a gifski GIF in 4:4:4, which
+/// its pipe carries, so the outline skips a 4:2:0 round trip; MP4 and WebP encode 4:2:0
+/// regardless.
+fn caption_overlay(pass: &SinglePass<'_>, index: usize) -> String {
+    let format = match pass.file_type {
+        FileType::Gif if pass.settings.piped_to_gifski(FileType::Gif) => ":format=yuv444",
+        FileType::Gif => ":format=rgb",
+        _ => "",
     };
     format!("[scaled];[scaled][{index}:v]overlay=(W-w)/2:(H-h)/2{format}")
 }
@@ -465,7 +526,8 @@ fn dither_option(dither: GifDither) -> &'static str {
     }
 }
 
-/// The GIF muxer counts repeats, not plays: -1 plays once, 0 loops forever.
+/// The GIF muxer and gifski's `--repeat` count repeats, not plays: -1 plays once, 0 loops
+/// forever.
 fn gif_loop(plays: u32) -> i64 {
     match plays {
         0 => 0,

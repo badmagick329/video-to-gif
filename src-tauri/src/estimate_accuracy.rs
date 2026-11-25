@@ -110,10 +110,12 @@ fn request(clip: &Path, info: &SourceInfo, case: &Case) -> ExportRequest {
 }
 
 fn compare(ffmpeg: &Path, clip: &Path, info: &SourceInfo, case: &Case) {
+    let gifski = SearchPath::from_env().find("gifski");
     let work = TempDir::new().unwrap();
     let destination = TempDir::new().unwrap();
     let env = Environment {
         ffmpeg,
+        gifski: gifski.as_deref(),
         work_dir: work.path(),
         available_memory: memory::available_bytes(),
     };

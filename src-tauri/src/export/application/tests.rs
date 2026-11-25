@@ -16,6 +16,14 @@ use crate::export::domain::plan::ExportRequest;
 use crate::process;
 use crate::search_path::SearchPath;
 
+/// gifski on PATH, for the gifski GIF tests; looked up once.
+fn gifski() -> Option<&'static Path> {
+    static GIFSKI: std::sync::OnceLock<Option<PathBuf>> = std::sync::OnceLock::new();
+    GIFSKI
+        .get_or_init(|| SearchPath::from_env().find("gifski"))
+        .as_deref()
+}
+
 fn ffmpeg() -> PathBuf {
     SearchPath::from_env()
         .locate_tools()
@@ -214,6 +222,7 @@ fn export(plan_for: impl FnOnce(&Path) -> ExportPlan) -> Run {
         &plan,
         Environment {
             ffmpeg: &ffmpeg(),
+            gifski: gifski(),
             work_dir: work.path(),
             available_memory: None,
         },
@@ -830,6 +839,7 @@ fn a_cancelled_run_leaves_nothing_in_the_destination() {
         });
         let env = Environment {
             ffmpeg: &ffmpeg(),
+            gifski: gifski(),
             work_dir: work.path(),
             available_memory: None,
         };
@@ -907,6 +917,7 @@ fn cancelling_mid_run_keeps_the_finished_outputs_and_leaves_no_partial_file() {
         });
         let env = Environment {
             ffmpeg: &ffmpeg(),
+            gifski: gifski(),
             work_dir: work.path(),
             available_memory: None,
         };
@@ -1003,6 +1014,7 @@ fn a_run_needing_more_memory_than_is_free_is_refused_before_ffmpeg_starts() {
     let held = 20 * 80 * 60 * 4 * 2;
     let env = |available| Environment {
         ffmpeg: Path::new("no-ffmpeg-needed"),
+        gifski: None,
         work_dir: work.path(),
         available_memory: Some(available),
     };
@@ -1040,6 +1052,7 @@ fn a_run_whose_paging_was_accepted_goes_ahead() {
         &plan,
         Environment {
             ffmpeg: &ffmpeg(),
+            gifski: gifski(),
             work_dir: work.path(),
             available_memory: Some(1),
         },
@@ -1063,4 +1076,278 @@ fn one_export_runs_at_a_time() {
     assert!(running.control().is_cancelled());
     drop(running);
     assert!(exports.begin().is_ok());
+}
+
+// gifski GIFs: gifski must be on PATH for these, as ffmpeg is for the rest.
+
+/// Frames ffprobe decodes from `file`.
+fn frame_count(file: &Path) -> u64 {
+    let output = process::command(&ffprobe())
+        .args([
+            "-v",
+            "error",
+            "-count_frames",
+            "-select_streams",
+            "v:0",
+            "-show_entries",
+            "stream=nb_read_frames",
+            "-of",
+            "csv=p=0",
+        ])
+        .arg(file)
+        .output()
+        .unwrap();
+    String::from_utf8(output.stdout)
+        .unwrap()
+        .trim()
+        .parse()
+        .unwrap()
+}
+
+fn gifski_patch(settings: Value) -> Value {
+    let mut patch = json!({ "settings": { "gifEncoder": "gifski", "fileTypes": ["gif"] } });
+    merge(&mut patch, json!({ "settings": settings }));
+    patch
+}
+
+#[test]
+fn a_gifski_gif_has_the_selections_frames_size_and_plays() {
+    assert!(gifski().is_some(), "gifski must be on PATH for this test");
+    let dir = TempDir::new().unwrap();
+    let source = clip(dir.path());
+    let run = export_request(&source, gifski_patch(json!({})));
+    let gif = run.file(Gif);
+    let probed = probe(&gif);
+    assert_eq!((probed.width, probed.height), (80, 60));
+    // 2 s at 10 fps.
+    assert_eq!(frame_count(&gif), 20);
+    assert_close(probed.duration, 2.0, 0.11, "gifski GIF duration");
+    assert_eq!(gif_loop(&gif), Some(0), "forever by default");
+    let progress: Vec<f64> = run.progress.iter().map(|p| p.progress).collect();
+    assert_eq!(progress.first(), Some(&0.0));
+    assert_eq!(progress.last(), Some(&1.0));
+    assert!(progress.is_sorted(), "{progress:?}");
+    assert!(
+        progress.iter().filter(|&&p| p > 0.0 && p < 1.0).count() >= 3,
+        "{progress:?}"
+    );
+
+    // A trimmed, sped-up selection at another frame rate and width: 1 s at 2x plays 0.5 s, 4
+    // frames at 8 fps.
+    let trimmed = |direction: &str| {
+        let mut patch =
+            gifski_patch(json!({ "width": 120, "fps": 8, "speed": 2, "direction": direction }));
+        merge(&mut patch, json!({ "trim": { "start": 0.5, "end": 1.5 } }));
+        // The run owns the folder the GIF is in.
+        export_request(&source, patch)
+    };
+    let forward = trimmed("forward");
+    let gif = forward.file(Gif);
+    let probed = probe(&gif);
+    assert_eq!((probed.width, probed.height), (120, 90));
+    assert_eq!(frame_count(&gif), 4);
+    assert_close(probed.duration, 0.5, 0.06, "trimmed gifski GIF duration");
+    // Boomerang plays it there and back. gifski stores the turn's repeated frame once, held for
+    // two frames' time, so the GIF has one frame fewer but plays as long.
+    let boomerang = trimmed("boomerang");
+    let gif = boomerang.file(Gif);
+    assert_eq!(frame_count(&gif), 7);
+    assert_close(
+        probe(&gif).duration,
+        1.0,
+        0.06,
+        "boomerang gifski GIF duration",
+    );
+
+    for (plays, expected) in [(1, None), (3, Some(2))] {
+        let run = export_request(&source, gifski_patch(json!({ "plays": plays })));
+        assert_eq!(gif_loop(&run.file(Gif)), expected, "plays {plays}");
+    }
+}
+
+#[test]
+fn a_gifski_gif_keeps_the_sources_colours() {
+    let dir = TempDir::new().unwrap();
+    let source = marked_clip(dir.path());
+    let run = export_request(&source, gifski_patch(json!({ "width": 160 })));
+    let gif = run.file(Gif);
+    assert!(is_red(&gif, 10, 10), "the red box stays red");
+    assert!(!is_red(&gif, 100, 100), "the black stays black");
+}
+
+/// Whether a process with `pid` is still running.
+#[cfg(windows)]
+fn alive(pid: u32) -> bool {
+    let output = std::process::Command::new("tasklist")
+        .args(["/FI", &format!("PID eq {pid}"), "/NH", "/FO", "CSV"])
+        .output()
+        .unwrap();
+    String::from_utf8_lossy(&output.stdout).contains(&format!("\"{pid}\""))
+}
+
+#[cfg(windows)]
+#[test]
+fn cancelling_a_gifski_gif_kills_ffmpeg_and_gifski_and_leaves_no_file() {
+    let dir = TempDir::new().unwrap();
+    let path = generate(
+        dir.path(),
+        "long.mp4",
+        &[
+            "-f",
+            "lavfi",
+            "-i",
+            "testsrc2=size=320x240:rate=30:duration=20",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "ultrafast",
+            "-pix_fmt",
+            "yuv420p",
+        ],
+    );
+    let source = Source {
+        path,
+        info: info(320, 240, 20.0, 30.0, None),
+    };
+    let destination = TempDir::new().unwrap();
+    let work = TempDir::new().unwrap();
+    let plan = request(
+        &source,
+        gifski_patch(json!({ "width": "original", "fps": 30 })),
+    )
+    .validate(destination.path().to_owned())
+    .unwrap();
+    let control = ExportControl::default();
+    let mut progress = Vec::new();
+
+    let (outputs, pids) = thread::scope(|scope| {
+        // Cancel once gifski has written part of the GIF and ffmpeg has reported frames.
+        let watcher = scope.spawn(|| {
+            loop {
+                let job = lock(&control.state).job.clone();
+                let part = names(destination.path())
+                    .into_iter()
+                    .find(|name| name.contains(".part-"));
+                if let (Some(job), Some(part)) = (job, part)
+                    && fs::metadata(destination.path().join(part)).is_ok_and(|m| m.len() > 0)
+                {
+                    let pids = job.pids();
+                    control.cancel(false);
+                    return pids;
+                }
+                thread::sleep(Duration::from_millis(5));
+            }
+        });
+        let env = Environment {
+            ffmpeg: &ffmpeg(),
+            gifski: gifski(),
+            work_dir: work.path(),
+            available_memory: None,
+        };
+        let outputs = run(&plan, env, &control, |p| progress.push(p), |_| {}).unwrap();
+        (outputs, watcher.join().unwrap())
+    });
+
+    assert_eq!(outputs, [ExportOutput::Cancelled { file_type: Gif }]);
+    assert_eq!(pids.len(), 2, "ffmpeg and gifski");
+    for pid in pids {
+        assert!(!alive(pid), "process {pid} outlived the cancel");
+    }
+    assert!(
+        names(destination.path()).is_empty(),
+        "partial file left behind"
+    );
+    assert!(progress.iter().any(|p| p.progress > 0.0), "{progress:?}");
+    assert!(progress.iter().all(|p| p.progress < 1.0));
+}
+
+#[test]
+fn a_failing_gifski_is_named_with_its_own_error() {
+    let dir = TempDir::new().unwrap();
+    let source = clip(dir.path());
+    let run = export(|destination| {
+        let mut plan = request(
+            &source,
+            gifski_patch(json!({ "fileTypes": ["gif", "mp4"] })),
+        )
+        .validate(destination.to_owned())
+        .unwrap();
+        // An invalid setting slipped past validation: gifski takes qualities 1 to 100.
+        plan.selection.settings.gifski_quality = 0;
+        plan
+    });
+    match &run.outputs[0] {
+        ExportOutput::Failed { file_type, reason } => {
+            assert_eq!(*file_type, Gif);
+            assert!(reason.starts_with("gifski: "), "{reason}");
+            assert!(reason.contains("quality"), "{reason}");
+        }
+        other => panic!("expected the GIF to fail, got {other:?}"),
+    }
+    assert!(matches!(
+        run.outputs[1],
+        ExportOutput::Done { file_type: Mp4, .. }
+    ));
+    assert_eq!(names(run.destination.path()), ["clip.mp4"]);
+}
+
+#[test]
+fn a_failing_ffmpeg_in_front_of_gifski_is_reported_as_ffmpegs_error() {
+    let dir = TempDir::new().unwrap();
+    let source = clip(dir.path());
+    let run = export(|destination| {
+        let mut plan = request(&source, gifski_patch(json!({})))
+            .validate(destination.to_owned())
+            .unwrap();
+        // A source that turned into something else since its probe: ffmpeg cannot open it, and
+        // gifski, given no frames, fails after it.
+        let broken = dir.path().join("broken.mp4");
+        fs::write(&broken, b"not a video").unwrap();
+        plan.source = broken;
+        plan
+    });
+    match &run.outputs[0] {
+        ExportOutput::Failed { reason, .. } => {
+            assert!(!reason.starts_with("gifski"), "{reason}");
+            assert!(reason.contains("broken.mp4"), "{reason}");
+        }
+        other => panic!("expected the GIF to fail, got {other:?}"),
+    }
+    assert!(names(run.destination.path()).is_empty());
+}
+
+#[test]
+fn a_gifski_gif_without_gifski_on_path_fails_and_the_rest_still_run() {
+    let dir = TempDir::new().unwrap();
+    let source = clip(dir.path());
+    let destination = TempDir::new().unwrap();
+    let work = TempDir::new().unwrap();
+    let plan = request(
+        &source,
+        gifski_patch(json!({ "fileTypes": ["gif", "webp"] })),
+    )
+    .validate(destination.path().to_owned())
+    .unwrap();
+    let env = Environment {
+        ffmpeg: &ffmpeg(),
+        gifski: None,
+        work_dir: work.path(),
+        available_memory: None,
+    };
+    let outputs = run(&plan, env, &ExportControl::default(), |_| {}, |_| {}).unwrap();
+    assert_eq!(
+        outputs[0],
+        ExportOutput::Failed {
+            file_type: Gif,
+            reason: "gifski was not found on PATH".to_owned()
+        }
+    );
+    assert!(matches!(
+        outputs[1],
+        ExportOutput::Done {
+            file_type: Webp,
+            ..
+        }
+    ));
+    assert_eq!(names(destination.path()), ["clip.webp"]);
 }

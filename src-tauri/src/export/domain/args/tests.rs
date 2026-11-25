@@ -4,7 +4,7 @@
 use std::path::Path;
 
 use super::*;
-use crate::export::domain::settings::Width;
+use crate::export::domain::settings::{GifEncoder, Width};
 
 fn defaults() -> Settings {
     Settings {
@@ -16,8 +16,11 @@ fn defaults() -> Settings {
         flip_horizontal: false,
         flip_vertical: false,
         file_types: vec![FileType::Gif],
+        gif_encoder: GifEncoder::Ffmpeg,
         gif_colors: 256,
         gif_dither: GifDither::Sierra24a,
+        gifski_quality: 90,
+        gifski_motion_quality: 90,
         plays: 0,
         webp_quality: 80,
     }
@@ -606,4 +609,112 @@ fn outputs_that_hold_frames_tap_the_selection_before_the_holding_filter() {
         job_args,
     );
     assert!(graph(&captioned).contains("overlay=(W-w)/2:(H-h)/2:format=rgb,split[tap][main]"));
+}
+
+fn gifski(settings: &mut Settings) {
+    settings.gif_encoder = GifEncoder::Gifski;
+}
+
+/// The frame times a gifski GIF's ffmpeg writes to stderr, its stdout being the frames.
+const GIFSKI_REPORTS: [&str; 4] = [
+    "-stats_enc_pre:v:0",
+    "pipe:2",
+    "-stats_enc_pre_fmt:v:0",
+    "encoded={t}",
+];
+
+#[test]
+fn a_gifski_gif_runs_the_same_chain_then_pipes_bt709_444_y4m_to_stdout() {
+    let args = job(Gif, gifski);
+    assert_eq!(
+        graph(&args),
+        "[0:v]fps=15,scale=480:-2:flags=lanczos,\
+         scale=out_color_matrix=bt709:out_range=tv,format=yuv444p[out]"
+    );
+    // No palette, no -loop: gifski makes the GIF and its loop.
+    let at = args.iter().position(|a| a == "[out]").unwrap();
+    let mut expected = strings(&["[out]", "-pix_fmt", "yuv444p", "-f", "yuv4mpegpipe"]);
+    expected.extend(strings(&GIFSKI_REPORTS));
+    expected.push("-".to_owned());
+    assert_eq!(args[at..], expected);
+    // The output file is gifski's to write, never ffmpeg's.
+    assert!(!args.contains(&"output.gif".to_owned()));
+}
+
+#[test]
+fn a_gifski_gif_keeps_captions_and_direction_and_taps_only_a_reverse() {
+    let captioned = build(
+        Gif,
+        |s| {
+            gifski(s);
+            s.direction = Direction::Boomerang;
+        },
+        Extra {
+            captions: true,
+            ..EXTRA
+        },
+        job_args,
+    );
+    assert_eq!(
+        graph(&captioned[RUNNER_ARGS.len()..]),
+        format!(
+            "[0:v]fps=15,scale=480:-2:flags=lanczos[scaled];\
+             [scaled][1:v]overlay=(W-w)/2:(H-h)/2:format=yuv444,{BOUNCE},\
+             scale=out_color_matrix=bt709:out_range=tv,format=yuv444p[out]"
+        )
+    );
+    assert!(!captioned.contains(&"[tap]".to_owned()), "gifski streams");
+
+    let reverse = job(Gif, |s| {
+        gifski(s);
+        s.direction = Direction::Reverse;
+    });
+    assert!(graph(&reverse).contains("split[tap][main];[main]reverse,scale="));
+    let tap_at = reverse.iter().position(|a| a == "[tap]").unwrap();
+    assert_eq!(
+        reverse[tap_at + 2],
+        "pipe:2",
+        "the tap reports on stderr too"
+    );
+}
+
+#[test]
+fn gifski_gets_the_width_frame_rate_quality_and_plays_as_repeats() {
+    let args = |patch: fn(&mut Settings)| {
+        let mut settings = defaults();
+        patch(&mut settings);
+        gifski_args(&settings, 480, Path::new("out.part-1-1.gif"))
+            .into_iter()
+            .map(|arg| arg.into_string().unwrap())
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        args(|_| {}),
+        strings(&[
+            "-q",
+            "-W",
+            "480",
+            "--fps",
+            "15",
+            "--repeat=0",
+            "--quality",
+            "90",
+            "--motion-quality",
+            "90",
+            "-o",
+            "out.part-1-1.gif",
+            "-",
+        ])
+    );
+    let tuned = args(|s| {
+        s.fps = 24;
+        s.gifski_quality = 70;
+        s.gifski_motion_quality = 40;
+    });
+    assert_eq!(option(&tuned, "--fps"), "24");
+    assert_eq!(option(&tuned, "--quality"), "70");
+    assert_eq!(option(&tuned, "--motion-quality"), "40");
+    // Plays count the first play; gifski, like the GIF muxer, counts repeats after it.
+    assert!(args(|s| s.plays = 1).contains(&"--repeat=-1".to_owned()));
+    assert!(args(|s| s.plays = 3).contains(&"--repeat=2".to_owned()));
 }

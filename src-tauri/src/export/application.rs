@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 use std::time::Duration;
 
-use crate::export::domain::args::{SinglePass, job_args};
+use crate::export::domain::args::{SinglePass, gifski_args, job_args};
 use crate::export::domain::memory::MemoryEstimate;
 use crate::export::domain::outcome::{ExportError, ExportOutput, ExportProgress};
 use crate::export::domain::plan::{ExportPlan, output_name};
@@ -18,6 +18,7 @@ use crate::export::domain::settings::FileType;
 use crate::export::infrastructure::captions::CaptionFile;
 use crate::export::infrastructure::job::{Job, JobEnd};
 use crate::export::infrastructure::outputs;
+use crate::process::Priority;
 
 /// How long shutting down waits for a cancelled export to delete its partial file.
 const SHUT_DOWN_WAIT: Duration = Duration::from_secs(5);
@@ -160,6 +161,8 @@ impl Exports {
 #[derive(Debug, Clone, Copy)]
 pub struct Environment<'a> {
     pub ffmpeg: &'a Path,
+    /// gifski on PATH, when there is one; a gifski GIF fails without it.
+    pub gifski: Option<&'a Path>,
     /// This session's temp folder, for the caption image.
     pub work_dir: &'a Path,
     /// Free physical memory in bytes, `None` when unknown.
@@ -211,7 +214,7 @@ pub fn run(
         } else {
             make_output(
                 plan,
-                env.ffmpeg,
+                env,
                 file_type,
                 &output_name(&source_name, file_type),
                 captions.as_ref().map(CaptionFile::path),
@@ -225,10 +228,11 @@ pub fn run(
     Ok(results)
 }
 
-/// One file type: run ffmpeg into a temporary file, then publish or delete it.
+/// One file type: run ffmpeg (piping a gifski GIF's frames to gifski) into a temporary file, then
+/// publish or delete it.
 fn make_output(
     plan: &ExportPlan,
-    ffmpeg: &Path,
+    env: Environment<'_>,
     file_type: FileType,
     name: &str,
     captions: Option<&Path>,
@@ -237,7 +241,19 @@ fn make_output(
 ) -> ExportOutput {
     let temp = outputs::temp_path(&plan.destination, name);
     let args = job_args(&SinglePass::from_plan(plan, file_type, &temp, captions));
-    let (job, output) = match Job::start(ffmpeg, &args) {
+    let settings = &plan.selection.settings;
+    let started = if settings.piped_to_gifski(file_type) {
+        match env.gifski {
+            Some(gifski) => {
+                let gifski_args = gifski_args(settings, plan.selection.size.width, &temp);
+                Job::start_piped(env.ffmpeg, &args, gifski, &gifski_args, Priority::Normal)
+            }
+            None => Err("gifski was not found on PATH".to_owned()),
+        }
+    } else {
+        Job::start(env.ffmpeg, &args)
+    };
+    let (job, output) = match started {
         Ok(started) => started,
         Err(reason) => return ExportOutput::Failed { file_type, reason },
     };

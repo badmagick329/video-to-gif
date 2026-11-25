@@ -8,7 +8,7 @@
 //! null output that writes a line per frame too: the tap, which moves while the input is read.
 
 use crate::export::domain::plan::{Selection, output_seconds};
-use crate::export::domain::settings::{Direction, FileType};
+use crate::export::domain::settings::{Direction, FileType, Settings};
 
 /// Key of the line ffmpeg writes as each frame enters the output's encoder; the value is the
 /// frame's time in output seconds.
@@ -22,20 +22,20 @@ pub const TAPPED: &str = "tapped";
 /// fast encode, more than a progress bar can show.
 const MIN_STEP: f64 = 0.005;
 
-/// The share of the whole run that reading the input stands for when `file_type` with `direction`
-/// holds frames until the input ends, or `None` when frames flow to the encoder as they are read,
-/// so the encoder's own times measure the run.
+/// The share of the whole run that reading the input stands for when `file_type` with these
+/// settings holds frames until the input ends, or `None` when frames flow to the encoder as they
+/// are read, so the encoder's own times measure the run.
 ///
 /// The shares come from timing each case on a 20 s 1080p clip at 480 and 1080 wide: reading the
-/// input took 20 to 45% of a GIF's run, whose palette and dithering follow, and 3 to 31% of a
-/// reversed WebP or MP4, where encoding dominates. Boomerang WebP and MP4 encode the forward half
-/// as it is read, so they need no tap.
-pub fn tap_share(file_type: FileType, direction: Direction) -> Option<f64> {
-    match (file_type, direction) {
-        (FileType::Gif, _) => Some(0.4),
-        (_, Direction::Reverse) => Some(0.2),
-        _ => None,
+/// input took 20 to 45% of an ffmpeg GIF's run, whose palette and dithering follow, and 3 to 31%
+/// of a reversed WebP or MP4, where encoding dominates. Boomerang WebP and MP4 encode the forward
+/// half as it is read, so they need no tap. A gifski GIF streams like them: ffmpeg's frames go
+/// down the pipe as they are made, and the pipe holds back ffmpeg to gifski's pace.
+pub fn tap_share(file_type: FileType, settings: &Settings) -> Option<f64> {
+    if file_type == FileType::Gif && !settings.piped_to_gifski(file_type) {
+        return Some(0.4);
     }
+    (settings.direction == Direction::Reverse).then_some(0.2)
 }
 
 /// Turns one run's stdout lines into progress from 0 to 1 that never goes backward.
@@ -61,7 +61,7 @@ impl ProgressMeter {
             Direction::Forward,
         );
         Self {
-            tap: tap_share(file_type, settings.direction).map(|share| (share, tap_seconds)),
+            tap: tap_share(file_type, settings).map(|share| (share, tap_seconds)),
             output_seconds: selection.output_seconds,
             tapped: 0.0,
             encoded: 0.0,
@@ -106,6 +106,11 @@ mod tests {
 
     /// A 10 s selection of a 20 s source at `speed` and `direction`.
     fn selection(speed: f64, direction: &str) -> Selection {
+        selection_by(speed, direction, "ffmpeg")
+    }
+
+    /// [`selection`], making its GIF with `encoder`.
+    fn selection_by(speed: f64, direction: &str, encoder: &str) -> Selection {
         let request: MemoryRequest = serde_json::from_value(json!({
             "info": {
                 "duration": 20.0, "width": 160, "height": 120, "frameRate": 10.0,
@@ -115,7 +120,8 @@ mod tests {
             "settings": {
                 "width": 80, "fps": 10, "speed": speed, "direction": direction, "rotation": 0,
                 "flipHorizontal": false, "flipVertical": false, "fileTypes": ["gif"],
-                "gifColors": 256, "gifDither": "sierra2_4a", "plays": 0, "webpQuality": 80
+                "gifColors": 256, "gifDither": "sierra2_4a", "plays": 0, "webpQuality": 80,
+                "gifEncoder": encoder
             }
         }))
         .unwrap();
@@ -173,6 +179,22 @@ mod tests {
         assert_eq!(
             read(&mut streaming, &["tapped=10", "encoded=10"]),
             [None, Some(0.5)]
+        );
+    }
+
+    #[test]
+    fn a_gifski_gif_follows_ffmpegs_frame_times_unless_reversed() {
+        let mut forward =
+            ProgressMeter::new(&selection_by(1.0, "forward", "gifski"), FileType::Gif);
+        assert_eq!(
+            read(&mut forward, &["tapped=5", "encoded=5", "encoded=10"]),
+            [None, Some(0.5), Some(1.0)]
+        );
+        let mut reverse =
+            ProgressMeter::new(&selection_by(1.0, "reverse", "gifski"), FileType::Gif);
+        assert_eq!(
+            read(&mut reverse, &["tapped=10", "encoded=5"]),
+            [Some(0.2), Some(0.6)]
         );
     }
 

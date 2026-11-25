@@ -80,8 +80,11 @@ pub async fn estimate_output_size(
             .locate_tools()
             .ffmpeg
             .ok_or(ExportError::FfmpegMissing)?;
+        // Optional: only a gifski GIF needs it, and that file type fails without it.
+        let gifski = SearchPath::from_env().find("gifski");
         let env = Environment {
             ffmpeg: &ffmpeg,
+            gifski: gifski.as_deref(),
             work_dir: &work_dir,
             available_memory: memory::available_bytes(),
         };
@@ -131,6 +134,8 @@ pub async fn run_export(
             .locate_tools()
             .ffmpeg
             .ok_or(ExportError::FfmpegMissing)?;
+        // Optional: only a gifski GIF needs it, and that file type fails without it.
+        let gifski = SearchPath::from_env().find("gifski");
         let work_dir = temp_folder::session_dir(&TempFolder::default_root());
         let exports = app.state::<Exports>();
         let running = exports.begin()?;
@@ -138,6 +143,7 @@ pub async fn run_export(
         app.state::<Estimates>().cancel(false);
         let env = Environment {
             ffmpeg: &ffmpeg,
+            gifski: gifski.as_deref(),
             work_dir: &work_dir,
             available_memory: memory::available_bytes(),
         };
