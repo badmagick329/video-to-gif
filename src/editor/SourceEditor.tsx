@@ -53,6 +53,7 @@ export default function SourceEditor({
   trim,
   crop,
   settings,
+  gifskiFound,
   results,
   memory,
   onSettingsChange,
@@ -68,6 +69,8 @@ export default function SourceEditor({
   trim?: ClipTrim;
   crop?: ClipCrop;
   settings: OutputSettings;
+  /** Whether the startup check found gifski, so the GIF encoder select offers it. */
+  gifskiFound: boolean;
   results: readonly SessionResult[];
   /** The frame-memory estimate for this selection, crop and settings. */
   memory: MemoryEstimate | null;
@@ -253,6 +256,7 @@ export default function SourceEditor({
               outputHeight={size.height}
               nativeWidth={size.native}
               hasAudio={hasAudio(info)}
+              gifskiFound={gifskiFound}
             />
           </fieldset>
         }

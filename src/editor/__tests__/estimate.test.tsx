@@ -41,7 +41,9 @@ async function wait(ms: number) {
 }
 
 type EstimateArgs = {
-  request: { settings: { width: number; fileTypes: string[] } };
+  request: {
+    settings: { width: number; fileTypes: string[]; gifEncoder: string };
+  };
 };
 
 const estimateCalls = () =>
@@ -50,9 +52,10 @@ const estimateCalls = () =>
   );
 
 /** Opens a 1080p clip with GIF, WebP and MP4 ticked, and lets the first estimate run. */
-async function openWithAllTicked() {
+async function openWithAllTicked({ gifskiFound = false } = {}) {
   const view = renderSourceEditor({
     info: sourceInfo({ width: 1920, height: 1080, duration: 60 }),
+    gifskiFound,
   });
   tauri.commands.estimate_output_size = estimateAnswers({
     gif: 6 * MiB,
@@ -131,6 +134,26 @@ test('a change reruns only the file types it affects', async () => {
   await wait(1500);
   expect(estimateCalls()[4]!.settings.fileTypes).toEqual(['gif', 'webp', 'mp4']);
   expect(estimateCalls()).toHaveLength(5);
+});
+
+test('the GIF encoder and gifski’s qualities rerun only the GIF', async () => {
+  await openWithAllTicked({ gifskiFound: true });
+  fireEvent.change(screen.getByRole('combobox', { name: 'GIF encoder' }), {
+    target: { value: 'gifski' },
+  });
+  await wait(1500);
+  expect(estimateCalls()[1]!.settings).toMatchObject({
+    fileTypes: ['gif'],
+    gifEncoder: 'gifski',
+  });
+
+  fireEvent.click(screen.getByRole('button', { name: 'GIF quality & looping' }));
+  fireEvent.change(screen.getByRole('slider', { name: 'Motion quality' }), {
+    target: { value: '50' },
+  });
+  await wait(1500);
+  expect(estimateCalls()[2]!.settings.fileTypes).toEqual(['gif']);
+  expect(estimateCalls()).toHaveLength(3);
 });
 
 test('estimates wait while the video plays', async () => {

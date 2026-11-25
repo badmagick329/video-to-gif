@@ -33,6 +33,30 @@ export const fileTypeInfo: Record<
   },
 };
 
+/**
+ * What makes the GIF: ffmpeg's palette filters, or the user's own gifski fed frames by ffmpeg.
+ * gifski is offered only when the startup check found it on PATH.
+ */
+export type GifEncoder = 'ffmpeg' | 'gifski';
+
+export const gifEncoderOptions: ReadonlyArray<{
+  value: GifEncoder;
+  label: string;
+}> = [
+  { value: 'ffmpeg', label: 'FFmpeg (palette)' },
+  { value: 'gifski', label: 'gifski (high quality)' },
+];
+
+/** The encoder a GIF is made with: gifski only while it is on PATH, FFmpeg otherwise. */
+export function usableGifEncoder(
+  settings: OutputSettings,
+  gifskiFound: boolean
+): OutputSettings {
+  return settings.gifEncoder === 'gifski' && !gifskiFound
+    ? { ...settings, gifEncoder: 'ffmpeg' }
+    : settings;
+}
+
 export type GifDither = 'sierra2_4a' | 'floyd_steinberg' | 'bayer' | 'none';
 
 export const gifDitherOptions: ReadonlyArray<{
@@ -96,9 +120,15 @@ export type OutputSettings = {
   /** Caption size as a percentage of the output's shorter side. */
   captionSize: number;
   fileTypes: FileType[];
+  gifEncoder: GifEncoder;
+  /** FFmpeg's palette size and dithering; gifski picks its own palettes. */
   gifColors: number;
   gifDither: GifDither;
-  /** Applies to GIF and WebP; MP4 players decide looping themselves. */
+  /** gifski's `--quality`, 1 to 100. */
+  gifskiQuality: number;
+  /** gifski's `--motion-quality`, 1 to 100: lower drops more motion detail for a smaller file. */
+  gifskiMotionQuality: number;
+  /** Applies to GIF (either encoder) and WebP; MP4 players decide looping themselves. */
   plays: number;
   webpQuality: number;
   keepSound: boolean;
@@ -110,6 +140,8 @@ export const settingLimits = {
   width: { min: 16, max: 4096 },
   fps: { min: 1, max: 60 },
   gifColors: { min: 2, max: 256 },
+  gifskiQuality: { min: 1, max: 100 },
+  gifskiMotionQuality: { min: 1, max: 100 },
   webpQuality: { min: 1, max: 100 },
   captionSize: { min: 5, max: 30 },
 } as const;
@@ -126,8 +158,12 @@ export const defaultOutputSettings: OutputSettings = {
   bottomText: '',
   captionSize: 12,
   fileTypes: ['gif'],
+  gifEncoder: 'ffmpeg',
   gifColors: 256,
   gifDither: 'sierra2_4a',
+  // gifski's own default; its motion quality follows its quality when not given.
+  gifskiQuality: 90,
+  gifskiMotionQuality: 90,
   plays: 0,
   webpQuality: 80,
   keepSound: false,

@@ -6,12 +6,14 @@ import { Segmented } from './Viewer';
 import {
   OutputSettings,
   FileType,
+  GifEncoder,
   clampSetting,
   directionOptions,
   fileTypeInfo,
   fileTypeOrder,
   formatSpeed,
   gifDitherOptions,
+  gifEncoderOptions,
   playsOptions,
   rotate,
   settingLimits,
@@ -52,6 +54,7 @@ export default function OutputSettingsForm({
   outputHeight,
   nativeWidth,
   hasAudio,
+  gifskiFound,
 }: {
   settings: OutputSettings;
   onChange: (settings: OutputSettings) => void;
@@ -62,12 +65,16 @@ export default function OutputSettingsForm({
   nativeWidth: number | null;
   /** From the probe, so it holds for the source whether the player shows it or a proxy. */
   hasAudio: boolean;
+  /** Whether the startup check found gifski, which the GIF encoder select then offers. */
+  gifskiFound: boolean;
 }) {
   const update = (patch: Partial<OutputSettings>) =>
     onChange({ ...settings, ...patch });
   const [qualityOpen, setQualityOpen] = useState(false);
   const fpsId = useId();
   const colorsId = useId();
+  const gifskiQualityId = useId();
+  const motionId = useId();
   const ditherId = useId();
   const playsId = useId();
   const webpId = useId();
@@ -92,9 +99,11 @@ export default function OutputSettingsForm({
     (option) => option.value === settings.gifDither
   );
   const plays = playsOptions.find((option) => option.value === settings.plays);
+  const gifski = settings.gifEncoder === 'gifski';
   const qualitySummary = [
-    `${settings.gifColors} colours`,
-    dither && shortLabel(dither.label),
+    ...(gifski
+      ? [`Quality ${settings.gifskiQuality}`, `Motion ${settings.gifskiMotionQuality}`]
+      : [`${settings.gifColors} colours`, dither && shortLabel(dither.label)]),
     plays?.label,
   ]
     .filter(Boolean)
@@ -128,9 +137,22 @@ export default function OutputSettingsForm({
           ))}
         </div>
         <Row label='GIF encoder' htmlFor={encoderId} wide>
-          {/* gifski joins this list in its own Task (VTG-15). */}
-          <select id={encoderId} className={field} defaultValue='ffmpeg'>
-            <option value='ffmpeg'>FFmpeg (palette)</option>
+          <select
+            id={encoderId}
+            className={field}
+            value={settings.gifEncoder}
+            onChange={(event) =>
+              update({ gifEncoder: event.target.value as GifEncoder })
+            }
+          >
+            {gifEncoderOptions
+              // gifski is optional: offered only when the startup check found it.
+              .filter(({ value }) => value === 'ffmpeg' || gifskiFound)
+              .map(({ value, label }) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
           </select>
         </Row>
         {ticked('webp') && (
@@ -384,47 +406,98 @@ export default function OutputSettingsForm({
         </h3>
         {qualityOpen && (
           <div id={qualityId} className='flex flex-col gap-[9px]'>
-            <Row label='Colours' htmlFor={colorsId}>
-              <input
-                id={colorsId}
-                type='range'
-                className='w-full'
-                min={settingLimits.gifColors.min}
-                max={settingLimits.gifColors.max}
-                step={1}
-                value={settings.gifColors}
-                onChange={(event) =>
-                  update({
-                    gifColors: clampSetting(
-                      'gifColors',
-                      Number(event.target.value)
-                    ),
-                  })
-                }
-              />
-              <span className={readout}>{settings.gifColors}</span>
-            </Row>
-            <p className='-mt-1 text-xs text-dim'>
-              Fewer colours make a smaller GIF; 64 to 128 is often plenty.
-            </p>
-            <Row label='Dithering' htmlFor={ditherId} wide>
-              <select
-                id={ditherId}
-                className={field}
-                value={settings.gifDither}
-                onChange={(event) =>
-                  update({
-                    gifDither: event.target.value as OutputSettings['gifDither'],
-                  })
-                }
-              >
-                {gifDitherOptions.map(({ value, label }) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-            </Row>
+            {gifski ? (
+              <>
+                <Row label='Quality' htmlFor={gifskiQualityId}>
+                  <input
+                    id={gifskiQualityId}
+                    type='range'
+                    className='w-full'
+                    min={settingLimits.gifskiQuality.min}
+                    max={settingLimits.gifskiQuality.max}
+                    step={1}
+                    value={settings.gifskiQuality}
+                    onChange={(event) =>
+                      update({
+                        gifskiQuality: clampSetting(
+                          'gifskiQuality',
+                          Number(event.target.value)
+                        ),
+                      })
+                    }
+                  />
+                  <span className={readout}>{settings.gifskiQuality}</span>
+                </Row>
+                <Row label='Motion' htmlFor={motionId}>
+                  <input
+                    id={motionId}
+                    type='range'
+                    aria-label='Motion quality'
+                    className='w-full'
+                    min={settingLimits.gifskiMotionQuality.min}
+                    max={settingLimits.gifskiMotionQuality.max}
+                    step={1}
+                    value={settings.gifskiMotionQuality}
+                    onChange={(event) =>
+                      update({
+                        gifskiMotionQuality: clampSetting(
+                          'gifskiMotionQuality',
+                          Number(event.target.value)
+                        ),
+                      })
+                    }
+                  />
+                  <span className={readout}>{settings.gifskiMotionQuality}</span>
+                </Row>
+                <p className='-mt-1 text-xs text-dim'>
+                  Lower motion quality smooths moving detail for a smaller GIF.
+                </p>
+              </>
+            ) : (
+              <>
+                <Row label='Colours' htmlFor={colorsId}>
+                  <input
+                    id={colorsId}
+                    type='range'
+                    className='w-full'
+                    min={settingLimits.gifColors.min}
+                    max={settingLimits.gifColors.max}
+                    step={1}
+                    value={settings.gifColors}
+                    onChange={(event) =>
+                      update({
+                        gifColors: clampSetting(
+                          'gifColors',
+                          Number(event.target.value)
+                        ),
+                      })
+                    }
+                  />
+                  <span className={readout}>{settings.gifColors}</span>
+                </Row>
+                <p className='-mt-1 text-xs text-dim'>
+                  Fewer colours make a smaller GIF; 64 to 128 is often plenty.
+                </p>
+                <Row label='Dithering' htmlFor={ditherId} wide>
+                  <select
+                    id={ditherId}
+                    className={field}
+                    value={settings.gifDither}
+                    onChange={(event) =>
+                      update({
+                        gifDither: event.target.value as OutputSettings['gifDither'],
+                      })
+                    }
+                  >
+                    {gifDitherOptions.map(({ value, label }) => (
+                      <option key={value} value={value}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                </Row>
+              </>
+            )}
             <Row label='Plays' htmlFor={playsId} wide>
               <select
                 id={playsId}

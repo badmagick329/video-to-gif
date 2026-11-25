@@ -17,6 +17,7 @@ import {
   rotate,
   soundDropReason,
   speedSteps,
+  usableGifEncoder,
 } from '../lib/output-settings';
 import { renderSourceEditor } from './harness';
 import {
@@ -31,6 +32,7 @@ import {
   resetTauri,
   sourceInfo,
   toolsFound,
+  toolsWithGifski,
 } from './tauri';
 
 vi.mock('@tauri-apps/api/core', async () => (await import('./tauri')).core);
@@ -380,8 +382,11 @@ describe('Output numbers', () => {
       bottomText: '',
       captionSize: 12,
       fileTypes: ['gif'],
+      gifEncoder: 'ffmpeg',
       gifColors: 256,
       gifDither: 'sierra2_4a',
+      gifskiQuality: 90,
+      gifskiMotionQuality: 90,
       plays: 0,
       webpQuality: 80,
       keepSound: false,
@@ -403,5 +408,74 @@ describe('Output numbers', () => {
   test('frame count rounds output seconds at the frame rate', () => {
     expect(frameCount(5, 15)).toBe(75);
     expect(frameCount(2.2, 15)).toBe(33);
+  });
+});
+
+describe('GIF encoder', () => {
+  const encoder = () => screen.getByRole('combobox', { name: 'GIF encoder' });
+  const options = () =>
+    within(encoder())
+      .getAllByRole('option')
+      .map((option) => option.textContent);
+  const openQuality = () =>
+    fireEvent.click(screen.getByRole('button', { name: 'GIF quality & looping' }));
+
+  test('without gifski on PATH the select holds FFmpeg only and the GIF settings are FFmpeg’s', async () => {
+    const { request } = renderSourceEditor({ info: sourceInfo() });
+    expect(options()).toEqual(['FFmpeg (palette)']);
+    expect(encoder()).toHaveValue('ffmpeg');
+    openQuality();
+    expect(screen.getByRole('slider', { name: 'Colours' })).toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: 'Dithering' })).toBeInTheDocument();
+    expect(screen.queryByRole('slider', { name: 'Quality' })).toBeNull();
+    await runExport();
+    expect(request().settings).toMatchObject({ gifEncoder: 'ffmpeg', gifColors: 256 });
+  });
+
+  test('gifski swaps colours and dithering for its quality and motion quality; plays stays', async () => {
+    const { request } = renderSourceEditor({ info: sourceInfo(), gifskiFound: true });
+    expect(options()).toEqual(['FFmpeg (palette)', 'gifski (high quality)']);
+    fireEvent.change(encoder(), { target: { value: 'gifski' } });
+    const quality = screen.getByRole('button', { name: 'GIF quality & looping' });
+    expect(quality.closest('h3')).toHaveTextContent('Quality 90 · Motion 90 · Forever');
+    openQuality();
+    expect(screen.queryByRole('slider', { name: 'Colours' })).toBeNull();
+    expect(screen.queryByRole('combobox', { name: 'Dithering' })).toBeNull();
+    fireEvent.change(screen.getByRole('slider', { name: 'Quality' }), {
+      target: { value: '75' },
+    });
+    fireEvent.change(screen.getByRole('slider', { name: 'Motion quality' }), {
+      target: { value: '60' },
+    });
+    fireEvent.change(screen.getByRole('combobox', { name: 'Plays' }), {
+      target: { value: '1' },
+    });
+    expect(quality.closest('h3')).toHaveTextContent('Quality 75 · Motion 60 · Play once');
+
+    await runExport();
+    expect(request().settings).toMatchObject({
+      gifEncoder: 'gifski',
+      gifskiQuality: 75,
+      gifskiMotionQuality: 60,
+      plays: 1,
+    });
+  });
+
+  test('the choice carries over to the next video', async () => {
+    clipBackend(sourceInfo());
+    await renderWithListeners(<Editor tools={toolsWithGifski} />);
+    await openClip('C:/videos/one.mp4', { width: 1280, height: 720 });
+    fireEvent.change(encoder(), { target: { value: 'gifski' } });
+    await drop('C:/videos/two.mp4');
+    await screen.findByRole('button', { name: 'Close two.mp4' });
+    expect(encoder()).toHaveValue('gifski');
+    expect(screen.getByText('gifski 1.32.0 on PATH')).toBeInTheDocument();
+  });
+
+  test('a gifski choice falls back to FFmpeg when gifski is missing', () => {
+    const chosen = settings({ gifEncoder: 'gifski' });
+    expect(usableGifEncoder(chosen, true)).toBe(chosen);
+    expect(usableGifEncoder(chosen, false)).toEqual({ ...chosen, gifEncoder: 'ffmpeg' });
+    expect(usableGifEncoder(settings(), false)).toEqual(settings());
   });
 });

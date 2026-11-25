@@ -15,6 +15,7 @@ export function renderSourceEditor({
   preview = 'source',
   frame = { width: info.width, height: info.height },
   memory = null,
+  gifskiFound = false,
 }: {
   info: SourceInfo;
   preview?: 'source' | 'proxy';
@@ -22,6 +23,8 @@ export function renderSourceEditor({
   frame?: { width: number; height: number };
   /** The frame-memory estimate the window would pass down. */
   memory?: MemoryEstimate | null;
+  /** Whether the startup check found gifski. */
+  gifskiFound?: boolean;
 }) {
   const onExport = vi.fn(
     async (request: ExportRequest, destination: string) => {
@@ -49,6 +52,7 @@ export function renderSourceEditor({
         trim={trim}
         crop={crop}
         settings={settings}
+        gifskiFound={gifskiFound}
         results={[]}
         memory={memory}
         onSettingsChange={setSettings}

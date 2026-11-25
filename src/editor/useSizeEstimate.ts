@@ -44,7 +44,8 @@ export type EstimateInput = {
 
 /**
  * What each file type's size depends on, as comparable strings. A change reruns only the file
- * types whose key changed: GIF colours or dithering only the GIF, WebP quality only the WebP,
+ * types whose key changed: the GIF encoder and its quality settings only the GIF (colours and
+ * dithering for FFmpeg, quality and motion quality for gifski), WebP quality only the WebP,
  * keep sound only the MP4; anything else every ticked file type.
  */
 export function estimateKeys(input: EstimateInput): Record<FileType, string> {
@@ -69,8 +70,10 @@ export function estimateKeys(input: EstimateInput): Record<FileType, string> {
   return {
     gif: JSON.stringify([
       common,
-      settings.gifColors,
-      settings.gifDither,
+      settings.gifEncoder,
+      ...(settings.gifEncoder === 'gifski'
+        ? [settings.gifskiQuality, settings.gifskiMotionQuality]
+        : [settings.gifColors, settings.gifDither]),
     ]),
     webp: JSON.stringify([common, settings.webpQuality]),
     mp4: JSON.stringify([common, keepSound(settings, info)]),

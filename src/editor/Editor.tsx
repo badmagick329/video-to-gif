@@ -18,6 +18,7 @@ import {
   carriedOverSummary,
   defaultOutputSettings,
   forNewClip,
+  usableGifEncoder,
 } from './lib/output-settings';
 import { ClipCrop, ClipTrim } from './lib/types';
 
@@ -28,9 +29,12 @@ import { ClipCrop, ClipTrim } from './lib/types';
  * `useExport`, and where they are saved from `useDestination`.
  */
 export default function Editor({ tools }: { tools: Tools }) {
-  const [settings, setSettings] = useState<OutputSettings>(
+  const [chosen, setSettings] = useState<OutputSettings>(
     defaultOutputSettings
   );
+  const gifskiFound = tools.gifski.status === 'found';
+  // The encoder choice carries over between videos; without gifski a GIF falls back to FFmpeg.
+  const settings = usableGifEncoder(chosen, gifskiFound);
   const [edit, setEdit] = useState<{ trim?: ClipTrim; crop?: ClipCrop }>({});
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   // A new clip starts with no trim or crop, upright, forward and uncaptioned.
@@ -75,6 +79,7 @@ export default function Editor({ tools }: { tools: Tools }) {
             trim={edit.trim}
             crop={edit.crop}
             settings={settings}
+            gifskiFound={gifskiFound}
             results={results}
             memory={memory}
             onSettingsChange={setSettings}
