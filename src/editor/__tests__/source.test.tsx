@@ -1,6 +1,6 @@
 // Opening a source into the editor: probe, preview source or proxy, failures, and the source's
 // displayed pixels standing in for a proxy's in every size the editor shows.
-import { act, fireEvent, screen } from '@testing-library/react';
+import { act, fireEvent, screen, within } from '@testing-library/react';
 
 import Editor from '../Editor';
 import { renderSourceEditor } from './harness';
@@ -40,6 +40,14 @@ function deferred<T>() {
     reject = rej;
   });
   return { promise, resolve, reject };
+}
+
+/** ffmpeg's own message is in the alert, folded until the user opens it. */
+function expectFolded(alert: HTMLElement, reason: string) {
+  const details = alert.querySelector('details')!;
+  expect(details).not.toHaveAttribute('open');
+  expect(within(details).getByText("ffmpeg's reason")).toBeInTheDocument();
+  expect(within(details).getByText(reason)).toBeInTheDocument();
 }
 
 beforeEach(() => {
@@ -99,9 +107,9 @@ test('shows why a dropped file cannot be opened, in plain words', async () => {
 
   await drop('C:\\videos\\notes.mp4');
 
-  expect(await screen.findByRole('alert')).toHaveTextContent(
-    'ffmpeg cannot read notes.mp4: Invalid data found when processing input'
-  );
+  const alert = await screen.findByRole('alert');
+  expect(alert).toHaveTextContent(/^ffmpeg cannot read notes\.mp4\./);
+  expectFolded(alert, 'Invalid data found when processing input');
   expect(document.querySelector('video')).toBeNull();
 });
 
@@ -194,9 +202,11 @@ test('says when ffmpeg fails to make the proxy', async () => {
   await renderWithListeners(<Editor ffmpeg={ffmpegFound} />);
   await drop('C:\\videos\\broken.mkv');
 
-  expect(await screen.findByRole('alert')).toHaveTextContent(
-    'ffmpeg could not make a preview copy of broken.mkv: Conversion failed!'
+  const alert = await screen.findByRole('alert');
+  expect(alert).toHaveTextContent(
+    /^ffmpeg could not make a preview copy of broken\.mkv\./
   );
+  expectFolded(alert, 'Conversion failed!');
 });
 
 test('removing the clip mid-proxy closes its source in the backend', async () => {

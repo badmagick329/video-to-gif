@@ -111,6 +111,18 @@ export async function drop(path: string) {
   });
 }
 
+/** A file dragged over the window (`enter`, `over`) or away from it (`leave`), as Tauri reports. */
+export async function drag(type: 'enter' | 'over' | 'leave', path = '') {
+  await act(async () => {
+    tauri.drop!({
+      payload:
+        type === 'leave'
+          ? { type }
+          : { type, paths: [path], position: { x: 600, y: 300 } },
+    });
+  });
+}
+
 export async function progress(source: string, value: number) {
   await emit('proxy-progress', { source, progress: value });
 }

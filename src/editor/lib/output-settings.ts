@@ -150,6 +150,18 @@ export function forNewClip(settings: OutputSettings): OutputSettings {
   };
 }
 
+/** The settings a new clip starts with, in a line: file types, width and frame rate. */
+export function carriedOverSummary(settings: OutputSettings): string {
+  const types =
+    fileTypeOrder
+      .filter((type) => settings.fileTypes.includes(type))
+      .map((type) => fileTypeInfo[type].label)
+      .join(' + ') || 'No file type';
+  const width =
+    settings.width === 'original' ? 'original width' : `${settings.width} px`;
+  return `${types} · ${width} · ${settings.fps} fps`;
+}
+
 export function rotate(rotation: Rotation, turn: 'left' | 'right'): Rotation {
   return ((rotation + (turn === 'right' ? 90 : 270)) % 360) as Rotation;
 }

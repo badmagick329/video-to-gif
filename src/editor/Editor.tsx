@@ -1,9 +1,9 @@
-import clsx from 'clsx';
 import { useCallback, useState } from 'react';
 
 import Inspector from './Inspector';
 import ShortcutsOverlay from './ShortcutsOverlay';
 import SourceEditor from './SourceEditor';
+import StartView from './StartView';
 import StatusBar from './StatusBar';
 import Toolbar from './Toolbar';
 import { PlaceholderColumn } from './Viewer';
@@ -15,6 +15,7 @@ import { useClipShortcuts } from './useClipShortcuts';
 import type { Tool } from '../ipc/probe';
 import {
   OutputSettings,
+  carriedOverSummary,
   defaultOutputSettings,
   forNewClip,
 } from './lib/output-settings';
@@ -37,7 +38,8 @@ export default function Editor({ ffmpeg }: { ffmpeg: Tool }) {
     setEdit({});
     setSettings(forNewClip);
   }, []);
-  const { state, dragging, chooseFile, close, unplayable } = useSource(onOpen);
+  const { state, dragging, chooseFile, openPath, close, unplayable } =
+    useSource(onOpen);
   const { job, results, start, cancel } = useExport();
   const open = state.stage === 'open' ? state : null;
   const saveTo = useDestination(open ? open.path : null);
@@ -55,12 +57,7 @@ export default function Editor({ ffmpeg }: { ffmpeg: Tool }) {
   );
 
   return (
-    <main
-      className={clsx(
-        'grid h-dvh min-w-0 grid-rows-[44px_minmax(0,1fr)_26px] overflow-hidden bg-canvas',
-        dragging && 'outline outline-2 -outline-offset-2 outline-accent'
-      )}
-    >
+    <main className='grid h-dvh min-w-0 grid-rows-[44px_minmax(0,1fr)_26px] overflow-hidden bg-canvas'>
       <h1 className='sr-only'>video-to-gif</h1>
       <Toolbar
         path={state.stage === 'empty' ? null : state.path}
@@ -69,70 +66,58 @@ export default function Editor({ ffmpeg }: { ffmpeg: Tool }) {
         onOpen={() => void chooseFile()}
         onClose={close}
       />
-      {open ? (
-        <SourceEditor
-          // A new clip starts with fresh media and export state.
-          key={open.id}
-          source={open}
-          trim={edit.trim}
-          crop={edit.crop}
-          settings={settings}
-          results={results}
-          memory={memory}
-          onSettingsChange={setSettings}
-          onTrimChange={(trim) => setEdit((current) => ({ ...current, trim }))}
-          onCropChange={(crop) => setEdit((current) => ({ ...current, crop }))}
-          onUnplayable={unplayable}
-          job={job}
-          saveTo={saveTo}
-          onExport={start}
-          onCancel={cancel}
-        />
+      {state.stage === 'open' ? (
+        <div className='relative grid min-h-0'>
+          <SourceEditor
+            // A new clip starts with fresh media and export state.
+            key={state.id}
+            source={state}
+            trim={edit.trim}
+            crop={edit.crop}
+            settings={settings}
+            results={results}
+            memory={memory}
+            onSettingsChange={setSettings}
+            onTrimChange={(trim) =>
+              setEdit((current) => ({ ...current, trim }))
+            }
+            onCropChange={(crop) =>
+              setEdit((current) => ({ ...current, crop }))
+            }
+            onUnplayable={unplayable}
+            job={job}
+            saveTo={saveTo}
+            onExport={start}
+            onCancel={cancel}
+          />
+          {dragging && <DropOverTarget name={fileName(state.path)} />}
+        </div>
       ) : (
         <div className='grid min-h-0 grid-cols-[minmax(0,1fr)_340px]'>
           <PlaceholderColumn>
-            {state.stage === 'probing' ? (
-              <p aria-busy='true'>Opening {fileName(state.path)}…</p>
-            ) : (
-              <>
-                {state.stage === 'failed' && (
-                  <p role='alert' className='max-w-2xl font-medium text-danger'>
-                    {state.message}
-                  </p>
-                )}
-                <p className='text-lg font-medium'>
-                  Drop a video or GIF anywhere in this window
-                </p>
-                <p className='text-dim'>
-                  Anything your ffmpeg can read, at any size. The file is
-                  opened in place, never copied.
-                </p>
-                <button
-                  type='button'
-                  className='mt-1 flex h-[38px] items-center gap-2.5 rounded-[7px] bg-accent px-5 text-[13.5px] font-semibold text-accent-fg hover:bg-accent-hover'
-                  onClick={() => void chooseFile()}
-                >
-                  Open video…
-                  <span
-                    aria-hidden
-                    className='rounded border border-[#5a2c08]/45 px-1 font-mono text-2xs text-[#5a2c08]'
-                  >
-                    Ctrl O
-                  </span>
-                </button>
-              </>
-            )}
+            <StartView
+              state={state}
+              dragging={dragging}
+              onChoose={() => void chooseFile()}
+              onOpen={(path) => void openPath(path)}
+            />
           </PlaceholderColumn>
-          <Inspector
-            results={results}
-            job={job}
-            onCancel={cancel}
-            output={
-              <p className='px-6 py-10 text-center text-dim'>
-                Output settings appear here once a video is open.
-              </p>
-            }
-          />
+          {results.length > 0 || job ? (
+            // This session's outputs stay reachable after their clip is closed.
+            <Inspector
+              results={results}
+              job={job}
+              onCancel={cancel}
+              output={<NothingOpen settings={settings} />}
+            />
+          ) : (
+            <aside
+              aria-label='Inspector'
+              className='flex min-h-0 min-w-0 flex-col border-l border-line bg-panel'
+            >
+              <NothingOpen settings={settings} />
+            </aside>
+          )}
         </div>
       )}
       <StatusBar
@@ -143,5 +128,43 @@ export default function Editor({ ffmpeg }: { ffmpeg: Tool }) {
       />
       {shortcutsOpen && <ShortcutsOverlay onClose={closeShortcuts} />}
     </main>
+  );
+}
+
+/**
+ * Over the viewer while a file is dragged across the window with a video open: a drop anywhere
+ * opens the file in its place.
+ */
+function DropOverTarget({ name }: { name: string }) {
+  return (
+    <div
+      aria-hidden
+      className='pointer-events-none absolute bottom-[180px] left-0 right-[340px] top-0 m-4 grid place-items-center rounded-xl border-[1.5px] border-dashed border-accent bg-stage/80'
+    >
+      <p className='text-lg font-medium'>Drop to open it in place of {name}</p>
+    </div>
+  );
+}
+
+/** The inspector's Output tab with nothing open: what it will hold, and what carries over. */
+function NothingOpen({ settings }: { settings: OutputSettings }) {
+  return (
+    <div className='flex h-full flex-col items-center justify-center gap-2 px-10 text-center text-dim'>
+      <svg
+        aria-hidden
+        width='28'
+        height='28'
+        viewBox='0 0 24 24'
+        fill='none'
+        stroke='#55595f'
+        strokeWidth='1.5'
+      >
+        <path d='M4 6h16M4 12h10M4 18h13' />
+      </svg>
+      <p>Output settings appear here once a video is open.</p>
+      <p className='text-sm text-faint'>
+        Carried over: {carriedOverSummary(settings)}
+      </p>
+    </div>
   );
 }

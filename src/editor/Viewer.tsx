@@ -178,8 +178,14 @@ export function PlaceholderColumn({
       </section>
       <section
         aria-label='Timeline'
-        className='h-[180px] shrink-0 border-t border-line bg-dock'
-      />
+        className='flex h-[180px] shrink-0 flex-col gap-2.5 border-t border-line bg-dock px-4 py-3'
+      >
+        <p aria-hidden className='text-sm text-faint'>
+          Timeline
+        </p>
+        {/* The board's ghost track: an empty strip with faint slice lines. */}
+        <div className='h-[72px] rounded-md bg-[repeating-linear-gradient(90deg,#17181b_0_112px,#1a1b1f_112px_113px)]' />
+      </section>
     </div>
   );
 }

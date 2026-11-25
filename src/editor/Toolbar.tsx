@@ -75,9 +75,9 @@ export default function Toolbar({
           Ctrl O
         </span>
       </button>
-      <div aria-hidden className='h-5 w-px shrink-0 bg-line-control' />
       {name ? (
         <>
+          <div aria-hidden className='h-5 w-px shrink-0 bg-line-control' />
           <p className='min-w-0 max-w-[460px] truncate font-medium' title={path}>
             {name}
           </p>

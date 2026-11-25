@@ -29,7 +29,7 @@ export type OpenSource = {
 export type SourceState =
   | { stage: 'empty' }
   | { stage: 'probing'; path: string }
-  | { stage: 'failed'; path: string; message: string }
+  | { stage: 'failed'; path: string; failure: OpenFailure }
   | ({ stage: 'open' } & OpenSource);
 
 /** Extensions offered first in the file dialog; "All files" follows, since ffmpeg reads more. */
@@ -56,47 +56,89 @@ export function fileName(path: string): string {
   return path.split(/[\\/]/).pop() || path;
 }
 
-function probeMessage(error: unknown, path: string): string {
+/**
+ * Why a source did not open, in plain words, with the tool's own message folded under it: the
+ * viewer shows `text` and keeps `detail` collapsed until asked.
+ */
+export type OpenFailure = {
+  text: string;
+  detail?: { label: string; text: string };
+};
+
+const ffmpegsReason = (text: string) => ({ label: "ffmpeg's reason", text });
+
+function probeFailure(error: unknown, path: string): OpenFailure {
   const name = fileName(path);
-  if (!isProbeError(error)) return `Could not open ${name}: ${String(error)}`;
+  if (!isProbeError(error))
+    return {
+      text: `Could not open ${name}.`,
+      detail: { label: 'Details', text: String(error) },
+    };
   switch (error.kind) {
     case 'ffprobeMissing':
-      return 'ffprobe was not found on PATH, so the video cannot be read.';
+      return {
+        text: 'ffprobe was not found on PATH, so the video cannot be read.',
+      };
     case 'ffprobeFailed':
-      return `ffprobe could not start: ${error.reason}`;
+      return {
+        text: `ffprobe could not start, so ${name} cannot be read.`,
+        detail: ffmpegsReason(error.reason),
+      };
     case 'notFound':
-      return `There is no file at ${path}.`;
+      return { text: `There is no file at ${path}.` };
     case 'unreadable':
-      return `ffmpeg cannot read ${name}: ${error.reason}`;
+      return {
+        text: `ffmpeg cannot read ${name}.`,
+        detail: ffmpegsReason(error.reason),
+      };
     case 'noVideoStream':
-      return `${name} has no video in it.`;
+      return { text: `${name} has no video in it.` };
     case 'invalidOutput':
-      return `ffprobe described ${name} in a way the app does not understand: ${error.reason}`;
+      return {
+        text: `ffprobe described ${name} in a way the app does not understand.`,
+        detail: ffmpegsReason(error.reason),
+      };
   }
 }
 
-function previewMessage(error: unknown, path: string): string {
+function previewFailure(error: unknown, path: string): OpenFailure {
   const name = fileName(path);
   if (!isPreviewError(error))
-    return `Could not preview ${name}: ${String(error)}`;
+    return {
+      text: `Could not preview ${name}.`,
+      detail: { label: 'Details', text: String(error) },
+    };
   switch (error.kind) {
     case 'notFound':
-      return `There is no file at ${path}.`;
+      return { text: `There is no file at ${path}.` };
     case 'ffmpegMissing':
-      return 'ffmpeg was not found on PATH, so no preview copy can be made.';
+      return {
+        text: 'ffmpeg was not found on PATH, so no preview copy can be made.',
+      };
     case 'proxyFailed':
-      return `ffmpeg could not make a preview copy of ${name}: ${error.reason}`;
+      return {
+        text: `ffmpeg could not make a preview copy of ${name}.`,
+        detail: ffmpegsReason(error.reason),
+      };
     case 'notServable':
-      return `The player cannot read ${name}: ${error.reason}`;
+      return {
+        text: `The player cannot read ${name}.`,
+        detail: { label: 'Details', text: error.reason },
+      };
     default:
-      return `Could not preview ${name} (${error.kind}).`;
+      return {
+        text: `Could not preview ${name}.`,
+        detail: { label: 'Details', text: error.kind },
+      };
   }
 }
 
 /**
- * The editor's source: opened by a drop anywhere on the window or the file dialog, probed, and
- * given a preview source, the file itself when WebView2 can play it, otherwise a proxy built by
- * ffmpeg. This replaces mgck's dropzone and paste hooks, which hand over in-memory files.
+ * The editor's source: opened by a drop anywhere on the window, the file dialog or Recent, probed,
+ * and given a preview source, the file itself when WebView2 can play it, otherwise a proxy built
+ * by ffmpeg. All three hand `openPath` a path, so each reaches Rust's allowlist the same way:
+ * `probe_source`, then `open_source`, which admits the path and adds it to Recent. A drop with a
+ * source open replaces it.
  *
  * `onOpen` runs as each new source starts opening, so the editor can reset per-clip state.
  */
@@ -137,7 +179,7 @@ export function useSource(onOpen: () => void) {
         setState({
           stage: 'failed',
           path,
-          message: previewMessage(error, path),
+          failure: previewFailure(error, path),
         });
       }
     },
@@ -159,7 +201,7 @@ export function useSource(onOpen: () => void) {
           setState({
             stage: 'failed',
             path,
-            message: probeMessage(error, path),
+            failure: probeFailure(error, path),
           });
         return;
       }
@@ -173,7 +215,7 @@ export function useSource(onOpen: () => void) {
           setState({
             stage: 'failed',
             path,
-            message: previewMessage(error, path),
+            failure: previewFailure(error, path),
           });
         return;
       }
@@ -266,9 +308,11 @@ export function useSource(onOpen: () => void) {
       setState({
         stage: 'failed',
         path: state.path,
-        message: `The preview copy of ${fileName(state.path)} could not play.`,
+        failure: {
+          text: `The preview copy of ${fileName(state.path)} could not play.`,
+        },
       });
   }, [state, buildProxy]);
 
-  return { state, dragging, chooseFile, close, unplayable };
+  return { state, dragging, chooseFile, openPath, close, unplayable };
 }
