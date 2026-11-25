@@ -6,11 +6,13 @@
 //! to each source as it is opened, so the webview can read nothing else on disk.
 
 use std::error::Error;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use tauri::{App, AppHandle, Emitter, Manager, State};
 
-use crate::preview::domain::{PreviewError, PreviewSource, ProxyProgress, TimeRange};
+use crate::preview::domain::{PreviewError, PreviewSource, ProxyProgress, RecentSource, TimeRange};
+use crate::preview::infrastructure::recent::RecentSources;
 use crate::preview::infrastructure::session::Previewer;
 use crate::probe::domain::SourceInfo;
 use crate::search_path::SearchPath;
@@ -20,13 +22,15 @@ use crate::temp_folder::TempFolder;
 pub const PROXY_PROGRESS_EVENT: &str = "proxy-progress";
 
 /// Sweeps the temp folder of what a crashed session left, creates this session's folder, lets
-/// the webview read it and its subfolders, and puts the [`Previewer`] in Tauri's state. Called from the app's setup.
+/// the webview read it and its subfolders, and puts the [`Previewer`] and [`RecentSources`] in
+/// Tauri's state. Called from the app's setup.
 pub fn set_up(app: &App) -> Result<(), Box<dyn Error>> {
     let previewer = Previewer::new(TempFolder::create(&TempFolder::default_root())?);
     // Recursive, for the thumbnail folders inside it; the app writes everything in there.
     app.asset_protocol_scope()
         .allow_directory(previewer.proxy_dir(), true)?;
     app.manage(previewer);
+    app.manage(RecentSources::in_dir(&app.path().app_config_dir()?));
     Ok(())
 }
 
@@ -40,13 +44,51 @@ pub fn shut_down(app: &AppHandle) {
 
 /// Opens the source at `path`, described by `info` from `probe_source`, and says whether the
 /// player can play it as it is or needs a proxy from `make_proxy`. Replacing an open source
-/// cancels its proxy build and deletes its proxy.
+/// cancels its proxy build and deletes its proxy. Every way of opening a source (the dialog, a
+/// drop, Recent) ends here, so this is the only place the webview gains access to a source, and
+/// the only place a source joins Recent.
 #[tauri::command]
 pub async fn open_source(
     app: AppHandle,
     previewer: State<'_, Previewer>,
+    recent: State<'_, RecentSources>,
     path: String,
     info: SourceInfo,
+) -> Result<PreviewSource, PreviewError> {
+    open(&previewer, &recent, path, info, now_ms(), |file| {
+        app.asset_protocol_scope()
+            .allow_file(file)
+            .map_err(|err| err.to_string())
+    })
+}
+
+/// Recent, newest first, without sources whose files no longer exist (which it forgets). Recent
+/// that cannot be read or written back is reported as empty: it is a convenience, and the
+/// editor opens files without it.
+#[tauri::command]
+pub async fn recent_sources(recent: State<'_, RecentSources>) -> Result<Vec<RecentSource>, String> {
+    Ok(recent.load().unwrap_or_default())
+}
+
+/// Takes `path` off Recent. The file is untouched.
+#[tauri::command]
+pub async fn forget_recent_source(
+    recent: State<'_, RecentSources>,
+    path: String,
+) -> Result<(), String> {
+    recent
+        .remove(&PathBuf::from(path))
+        .map_err(|err| err.to_string())
+}
+
+/// `open_source` without Tauri: `admit` gives the webview read access to the file.
+fn open(
+    previewer: &Previewer,
+    recent: &RecentSources,
+    path: String,
+    info: SourceInfo,
+    opened_at: u64,
+    admit: impl FnOnce(&Path) -> Result<(), String>,
 ) -> Result<PreviewSource, PreviewError> {
     // Trust boundary: both arguments come from the frontend.
     let file = PathBuf::from(&path);
@@ -54,13 +96,23 @@ pub async fn open_source(
         return Err(PreviewError::NotFound { path });
     }
     check_info(&info)?;
-    app.asset_protocol_scope()
-        .allow_file(&file)
-        .map_err(|err| PreviewError::NotServable {
-            path: path.clone(),
-            reason: err.to_string(),
-        })?;
+    admit(&file).map_err(|reason| PreviewError::NotServable {
+        path: path.clone(),
+        reason,
+    })?;
+    // Failing to remember the source costs only its Recent entry; the open itself worked.
+    let _ = recent.add(RecentSource {
+        path: file.clone(),
+        duration: info.duration,
+        opened_at,
+    });
     Ok(previewer.open(file, info))
+}
+
+fn now_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |elapsed| elapsed.as_millis() as u64)
 }
 
 /// Closes the source at `path` when it is the open source, as the editor removes its clip: stops a
@@ -145,3 +197,6 @@ fn check_info(info: &SourceInfo) -> Result<(), PreviewError> {
         reason: reason.to_owned(),
     })
 }
+
+#[cfg(test)]
+mod tests;

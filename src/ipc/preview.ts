@@ -89,3 +89,26 @@ export function fileUrl(path: string): string {
 export function isPreviewError(error: unknown): error is PreviewError {
   return typeof error === 'object' && error !== null && 'kind' in error;
 }
+
+/** A source in Recent; Rust's `RecentSource`. */
+export type RecentSource = {
+  path: string;
+  /** Seconds. */
+  duration: number;
+  /** When it was last opened, in milliseconds since the Unix epoch. */
+  openedAt: number;
+};
+
+/**
+ * Recent, newest first, without sources whose files no longer exist. `open_source` adds to it;
+ * listing a path gives the webview no access to it, so an entry reopens through `probeSource` and
+ * `openSource` like a dialog pick.
+ */
+export function recentSources(): Promise<RecentSource[]> {
+  return invoke<RecentSource[]>('recent_sources');
+}
+
+/** Takes `path` off Recent; the file is untouched. */
+export function forgetRecentSource(path: string): Promise<void> {
+  return invoke<void>('forget_recent_source', { path });
+}

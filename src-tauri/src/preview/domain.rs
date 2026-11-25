@@ -3,7 +3,7 @@
 
 use std::ffi::OsString;
 use std::fmt;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
@@ -385,6 +385,29 @@ impl fmt::Display for PreviewError {
 }
 
 impl std::error::Error for PreviewError {}
+
+/// How many sources Recent keeps.
+pub const RECENT_LIMIT: usize = 8;
+
+/// A source in Recent: what the start state lists, and how the user reopens it.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecentSource {
+    /// The absolute path it was opened from.
+    pub path: PathBuf,
+    /// Seconds, from the probe it was opened with.
+    pub duration: f64,
+    /// When it was last opened, in milliseconds since the Unix epoch.
+    pub opened_at: u64,
+}
+
+/// Puts `opened` at the top of Recent, newest first: a source opened again moves up rather than
+/// appearing twice, and the oldest falls off past [`RECENT_LIMIT`].
+pub fn remember(recent: &mut Vec<RecentSource>, opened: RecentSource) {
+    recent.retain(|source| source.path != opened.path);
+    recent.insert(0, opened);
+    recent.truncate(RECENT_LIMIT);
+}
 
 #[cfg(test)]
 mod tests {
