@@ -1,6 +1,6 @@
 # Releasing
 
-A v0 release is one unsigned NSIS installer, built locally with `pnpm tauri build` and handed out by hand. Code signing, auto-update and CI are later work ([v0 scope](../decisions/2026-11-24-v0-scope.md)); until signing lands, SmartScreen warns on first run and the root [README](../../README.md) tells users to click *More info*, then *Run anyway*.
+A release is one unsigned NSIS installer, built locally with `pnpm tauri build` and attached to a GitHub Release on the version's tag (see *Publishing*). 0.1.0 predates this and was handed out by hand. Code signing, auto-update and CI are later work ([v0 scope](../decisions/2026-11-24-v0-scope.md)); until signing lands, SmartScreen warns on first run and the root [README](../../README.md) tells users to click *More info*, then *Run anyway*.
 
 ## Bumping the version
 
@@ -24,6 +24,10 @@ The bundle settings in `tauri.conf.json` shape the user's install:
 - `targets: ["nsis"]`: an MSI would need WiX and per-machine installs; one installer type keeps the README's install steps single.
 - `nsis.installMode: "currentUser"`: installs into `%LOCALAPPDATA%\video-to-gif` with a Start menu shortcut and an HKCU uninstall entry, so the installer never asks for administrator rights.
 - `webviewInstallMode: downloadBootstrapper` (silent): Windows 11 and current Windows 10 already ship WebView2, so the installer stays small and fetches the bootstrapper only on a PC that lacks it.
+
+## Publishing
+
+Commit the bump as `chore(release): <version>`, tag it `v<version>` (annotated) and push both. Then run `gh release create v<version> <installer path> --title "video-to-gif <version>" --notes-file <notes> --verify-tag`. The repo is public, so the release and its installer are public too. The notes cover what changed for users and the install steps (SmartScreen, ffmpeg on PATH). See `v0.2.0` for the shape.
 
 ## Regenerating the icon
 

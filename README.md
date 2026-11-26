@@ -16,7 +16,7 @@ To build it you also need stable Rust, Node.js and pnpm.
 
 ## Install
 
-Run `video-to-gif_0.2.0_x64-setup.exe`. It installs for your Windows account only, so it never asks for administrator rights. The app goes into `%LOCALAPPDATA%\video-to-gif` and gets a Start menu entry. On a PC without WebView2, the installer downloads it first.
+Download `video-to-gif_0.2.0_x64-setup.exe` from [Releases](https://github.com/badmagick329/video-to-gif/releases/latest) and run it. It installs for your Windows account only, so it never asks for administrator rights. The app goes into `%LOCALAPPDATA%\video-to-gif` and gets a Start menu entry. On a PC without WebView2, the installer downloads it first.
 
 The installer isn't signed yet, so the first time you run it Windows SmartScreen shows "Windows protected your PC". Click *More info*, then *Run anyway*.
 
