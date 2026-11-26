@@ -283,6 +283,12 @@ pub fn thumbnail_args(input: &Path, start: f64, length: f64, dir: &Path) -> Vec<
                     format!("{index}:V:0"),
                     "-frames:v".to_owned(),
                     "1".to_owned(),
+                    // The keyframe a seek lands on comes before the slice's middle, so its output
+                    // timestamp is negative, and the default frame-rate sync drops it. A slice
+                    // past the last keyframe would then write nothing, and ffmpeg fails the whole
+                    // strip opening an encoder that never got a frame.
+                    "-fps_mode".to_owned(),
+                    "passthrough".to_owned(),
                     "-vf".to_owned(),
                     format!("scale=-2:{THUMBNAIL_HEIGHT}"),
                     "-q:v".to_owned(),
@@ -640,6 +646,12 @@ mod tests {
         assert_eq!(long.iter().filter(|arg| *arg == "-i").count(), 24);
         assert!(has_pair(&long, "-skip_frame", "nokey"));
         assert!(long.iter().any(|arg| arg == "-noaccurate_seek"));
+        assert_eq!(
+            long.windows(2)
+                .filter(|pair| pair[0] == "-fps_mode" && pair[1] == "passthrough")
+                .count(),
+            24
+        );
         assert!(has_pair(&long, "-map", "23:V:0"));
         assert_eq!(long.last().unwrap(), "C:\\tmp\\thumbs-1\\thumb-24.jpg");
 

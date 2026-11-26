@@ -702,3 +702,40 @@ fn a_strip_longer_than_90_seconds_seeks_a_keyframe_per_slice() {
         std::fs::read(&thumbnails[23]).unwrap()
     );
 }
+
+#[test]
+fn slices_past_the_last_keyframe_show_that_keyframe() {
+    // Keyframes at 0, 30, 60 and 90 s; the last six slice middles, 92.5 s to 117.5 s, follow
+    // the last one, as in AV1 encodes that place keyframes only at scene cuts.
+    let clips = TempDir::new().unwrap();
+    let source = generate(
+        clips.path(),
+        "sparse-keyframes.mp4",
+        &[
+            "-f",
+            "lavfi",
+            "-i",
+            "testsrc2=size=320x180:rate=10:duration=120",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "ultrafast",
+            "-g",
+            "300",
+            "-keyint_min",
+            "300",
+            "-sc_threshold",
+            "0",
+            "-pix_fmt",
+            "yuv420p",
+        ],
+    );
+    let (_temp, _root, previewer) = previewer();
+    previewer.open(source.clone(), info(320, 180, 120.0, "h264", false));
+
+    let thumbnails = previewer.thumbnails(&source, None, ffmpeg_path).unwrap();
+    assert_eq!(thumbnails.len(), 24);
+    let frame = |index: usize| std::fs::read(&thumbnails[index]).unwrap();
+    assert_eq!(frame(18), frame(23), "both show the keyframe at 90 s");
+    assert_ne!(frame(17), frame(18));
+}
