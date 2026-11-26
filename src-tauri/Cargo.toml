@@ -1,6 +1,6 @@
 [package]
 name = "video-to-gif"
-version = "0.1.0"
+version = "0.2.0"
 description = "Turn videos into GIF, WebP and MP4 with the user's own ffmpeg"
 edition = "2024"
 rust-version = "1.97"
